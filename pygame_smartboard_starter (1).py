@@ -4,6 +4,7 @@ import math
 
 # Initialize Pygame
 pygame.init()
+pygame.mixer.init()  # Initialize the mixer for sound playback
 
 # Set up the display
 infoObject = pygame.display.Info()
@@ -48,6 +49,27 @@ JUMP_STRENGTH = -15
 MOVE_SPEED = 5
 FRICTION = 0.9
 
+# Load sounds
+try:
+    coin_sound = pygame.mixer.Sound("coin.wav")  # Replace with your sound file
+    level_complete_sound = pygame.mixer.Sound("level_complete.wav")  # Replace with your sound file
+    jump_sound = pygame.mixer.Sound("jump.wav")  # Replace with your sound file
+    
+    # Set volume
+    coin_sound.set_volume(0.5)
+    level_complete_sound.set_volume(0.7)
+    jump_sound.set_volume(0.4)
+except:
+    print("Warning: Sound files not found. Game will run without sound.")
+    # Create dummy sound objects that do nothing when played
+    class DummySound:
+        def play(self): pass
+        def set_volume(self, vol): pass
+    
+    coin_sound = DummySound()
+    level_complete_sound = DummySound()
+    jump_sound = DummySound()
+
 class Player:
     def __init__(self, x, y, color, player_num):
         self.rect = pygame.Rect(x, y, 40, 40)
@@ -75,6 +97,7 @@ class Player:
             if keys_pressed[pygame.K_w] and (self.on_ground or self.standing_on_player):
                 self.vel_y = JUMP_STRENGTH
                 self.is_jumping = True
+                jump_sound.play()  # Play jump sound
         else:  # Player 2
             if keys_pressed[pygame.K_LEFT]:
                 self.vel_x = -MOVE_SPEED
@@ -86,6 +109,7 @@ class Player:
             if keys_pressed[pygame.K_UP] and (self.on_ground or self.standing_on_player):
                 self.vel_y = JUMP_STRENGTH
                 self.is_jumping = True
+                jump_sound.play()  # Play jump sound
         
         # Apply gravity
         self.vel_y += GRAVITY
@@ -111,6 +135,7 @@ class Player:
             if self.rect.colliderect(coin.rect):
                 coins.remove(coin)
                 self.collected_coins += 1
+                coin_sound.play()  # Play coin collection sound
         
         # Keep player on screen
         self.rect.x = max(0, min(self.rect.x, SCREEN_WIDTH - self.rect.width))
@@ -251,14 +276,16 @@ def create_level_1():
         Coin(950, SCREEN_HEIGHT - 600),
     ]
     
-    return platforms, coins
+    total_coins = len(coins)  # Count the total coins
+    
+    return platforms, coins, total_coins
 
 def main():
     # Create game objects
     player1 = Player(100, SCREEN_HEIGHT - 100, BLUE, 1)
     player2 = Player(150, SCREEN_HEIGHT - 100, RED, 2)
     
-    platforms, coins = create_level_1()
+    platforms, coins, total_coins = create_level_1()
     goal = Goal(SCREEN_WIDTH - 100, SCREEN_HEIGHT - 120)
     
     running = True
@@ -280,7 +307,7 @@ def main():
                     player2.respawn()
                     player1.collected_coins = 0
                     player2.collected_coins = 0
-                    platforms, coins = create_level_1()
+                    platforms, coins, total_coins = create_level_1()
                     game_complete = False
         
         if not game_complete:
@@ -316,7 +343,8 @@ def main():
         player2.draw(screen)
         
         # Draw UI
-        score_text = font_medium.render(f"Coins: {player1.collected_coins + player2.collected_coins}/{6 - len(coins)}", True, BLACK)
+        collected_coins = player1.collected_coins + player2.collected_coins
+        score_text = font_medium.render(f"Coins: {collected_coins}/{total_coins}", True, BLACK)
         screen.blit(score_text, (20, 20))
         
         # Draw instructions
@@ -343,6 +371,14 @@ def main():
             continue_text = font_medium.render("Press R to play again", True, BLACK)
             continue_rect = continue_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 80))
             screen.blit(continue_text, continue_rect)
+        
+        # Play level complete sound when game is won
+        if (player1.rect.colliderect(goal.rect) and 
+            player2.rect.colliderect(goal.rect) and 
+            len(coins) == 0 and
+            not game_complete):  # Only play once when first completing
+            level_complete_sound.play()
+            game_complete = True
         
         # Update display
         pygame.display.flip()
