@@ -51,16 +51,20 @@ FRICTION = 0.9
 
 # Load sounds
 try:
-    coin_sound = pygame.mixer.Sound("coin.wav")  # Replace with your sound file
-    level_complete_sound = pygame.mixer.Sound("level_complete.wav")  # Replace with your sound file
-    jump_sound = pygame.mixer.Sound("jump.wav")  # Replace with your sound file
+    # Try to load MP3 files
+    coin_sound = pygame.mixer.Sound("coin.mp3")  # Use your MP3 file
+    level_complete_sound = pygame.mixer.Sound("level_complete.mp3")  # Use your MP3 file
+    jump_sound = pygame.mixer.Sound("jump.mp3")  # Use your MP3 file
     
     # Set volume
     coin_sound.set_volume(0.5)
     level_complete_sound.set_volume(0.7)
     jump_sound.set_volume(0.4)
-except:
-    print("Warning: Sound files not found. Game will run without sound.")
+    
+    print("Successfully loaded MP3 sound files")
+except Exception as e:
+    print(f"Warning: Sound files could not be loaded: {e}")
+    print("Game will run without sound.")
     # Create dummy sound objects that do nothing when played
     class DummySound:
         def play(self): pass
