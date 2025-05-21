@@ -90,10 +90,24 @@ class Player:
         self.touching_wall = False  # New attribute to track wall contact
         self.can_wall_jump = False  # New attribute to allow wall jumping
         self.wall_slide_speed = 2  # Slower falling speed when wall sliding
-        self.wall_jump_count = 0  # Count wall jumps
-        self.max_wall_jumps = 3  # Maximum number of wall jumps before touching ground
+        self.wall_jump_direction = 0  # Direction to bounce when wall jumping
+        self.last_wall_id = None  # Track the last wall we jumped from
+        self.bounce_timer = 0  # Timer to enforce bounce direction
+        self.ignore_wall_contact = False  # Flag to ignore wall contact during bounce
+        self.has_wall_jumped = False  # Flag to track if player has performed a wall jump
         
     def update(self, platforms, coins, keys_pressed, other_players=None):
+        # Handle bounce timer
+        if self.bounce_timer > 0:
+            self.bounce_timer -= 1
+            # Force velocity in bounce direction while timer is active - back to default force
+            self.vel_x = self.wall_jump_direction * MOVE_SPEED * 1.5  # Back to default 1.5
+            
+            # While bouncing, ignore wall contact with the same wall
+            self.ignore_wall_contact = True
+        else:
+            self.ignore_wall_contact = False
+        
         # Handle input
         if self.player_num == 1:
             if keys_pressed[pygame.K_a]:
@@ -103,13 +117,22 @@ class Player:
             else:
                 self.vel_x *= FRICTION
                 
-            if keys_pressed[pygame.K_w] and (self.on_ground or self.standing_on_player or self.can_wall_jump):
+            # Check if player can jump
+            can_normal_jump = self.on_ground or self.standing_on_player
+            can_do_wall_jump = self.can_wall_jump and not self.has_wall_jumped
+            
+            if keys_pressed[pygame.K_w] and self.bounce_timer <= 0 and (can_normal_jump or can_do_wall_jump):
                 self.vel_y = JUMP_STRENGTH
                 self.is_jumping = True
-                if self.can_wall_jump:
-                    self.wall_jump_count += 1  # Increment wall jump counter
-                    if self.wall_jump_count >= self.max_wall_jumps:
-                        self.can_wall_jump = False  # Use up all wall jumps
+                
+                if self.can_wall_jump and not self.has_wall_jumped:
+                    # Apply horizontal bounce away from wall with default force
+                    self.vel_x = self.wall_jump_direction * MOVE_SPEED * 1.5  # Back to default 1.5
+                    self.can_wall_jump = False  # Use up the wall jump
+                    self.has_wall_jumped = True  # Mark that player has wall jumped
+                    # Briefly prevent player from overriding the bounce direction
+                    self.bounce_timer = 10  # Back to original 10 frames
+                
                 jump_sound.play()  # Play jump sound
                 
         elif self.player_num == 2:
@@ -120,40 +143,65 @@ class Player:
             else:
                 self.vel_x *= FRICTION
                 
-            if keys_pressed[pygame.K_UP] and (self.on_ground or self.standing_on_player or self.can_wall_jump):
+            # Check if player can jump
+            can_normal_jump = self.on_ground or self.standing_on_player
+            can_do_wall_jump = self.can_wall_jump and not self.has_wall_jumped
+            
+            if keys_pressed[pygame.K_UP] and self.bounce_timer <= 0 and (can_normal_jump or can_do_wall_jump):
                 self.vel_y = JUMP_STRENGTH
                 self.is_jumping = True
-                if self.can_wall_jump:
-                    self.wall_jump_count += 1  # Increment wall jump counter
-                    if self.wall_jump_count >= self.max_wall_jumps:
-                        self.can_wall_jump = False  # Use up all wall jumps
+                
+                if self.can_wall_jump and not self.has_wall_jumped:
+                    # Apply horizontal bounce away from wall with default force
+                    self.vel_x = self.wall_jump_direction * MOVE_SPEED * 1.5  # Back to default 1.5
+                    self.can_wall_jump = False  # Use up the wall jump
+                    self.has_wall_jumped = True  # Mark that player has wall jumped
+                    # Briefly prevent player from overriding the bounce direction
+                    self.bounce_timer = 10  # Back to original 10 frames
+                
                 jump_sound.play()  # Play jump sound
         
         # Apply gravity
         self.vel_y += GRAVITY
         
-        # Apply wall sliding (slower falling when touching wall)
-        if self.touching_wall and self.vel_y > 0 and not self.on_ground:
-            self.vel_y = self.wall_slide_speed
+        # Remove wall sliding - players now fall at normal speed when touching walls
+        # if self.touching_wall and self.vel_y > 0 and not self.on_ground:
+        #     self.vel_y = self.wall_slide_speed
         
         # Move horizontally
         self.rect.x += int(self.vel_x)
         
         # Check for horizontal collisions
         self.touching_wall = False  # Reset wall contact status
+        current_wall_id = None
+        
         for platform in platforms:
             if self.rect.colliderect(platform.rect):
                 if self.vel_x > 0:  # Moving right
                     self.rect.right = platform.rect.left
-                    self.touching_wall = True
+                    # Only set touching_wall if we're not ignoring wall contact
+                    if not (self.ignore_wall_contact and id(platform) == self.last_wall_id):
+                        self.touching_wall = True
+                        self.wall_jump_direction = -1  # Bounce left when jumping
+                        current_wall_id = id(platform)  # Use platform's memory address as unique ID
                 elif self.vel_x < 0:  # Moving left
                     self.rect.left = platform.rect.right
-                    self.touching_wall = True
+                    # Only set touching_wall if we're not ignoring wall contact
+                    if not (self.ignore_wall_contact and id(platform) == self.last_wall_id):
+                        self.touching_wall = True
+                        self.wall_jump_direction = 1  # Bounce right when jumping
+                        current_wall_id = id(platform)  # Use platform's memory address as unique ID
                 self.vel_x = 0
         
-        # Enable wall jump if touching a wall and not on ground
-        if self.touching_wall and not self.on_ground:
+        # Enable wall jump if touching a wall, not on ground, and it's a different wall
+        # AND player hasn't already used their wall jump
+        if self.touching_wall and not self.on_ground and current_wall_id != self.last_wall_id and not self.has_wall_jumped:
             self.can_wall_jump = True
+            self.last_wall_id = current_wall_id  # Remember this wall
+        else:
+            # If player has already wall jumped, don't allow another wall jump
+            if self.has_wall_jumped:
+                self.can_wall_jump = False
         
         # Move vertically
         self.rect.y += int(self.vel_y)
@@ -186,17 +234,19 @@ class Player:
                 self.collected_coins += 1
                 coin_sound.play()  # Play coin sound
         
-        # Reset jumping state and wall jump count if on ground
+        # Reset jumping state and wall jump tracking if on ground
         if self.on_ground:
             self.is_jumping = False
-            self.wall_jump_count = 0  # Reset wall jump counter when touching ground
+            self.last_wall_id = None  # Reset wall tracking when touching ground
+            self.has_wall_jumped = False  # Reset wall jump flag when touching ground
             
     def respawn(self):
         self.rect.x = self.spawn_x
         self.rect.y = self.spawn_y
         self.vel_x = 0
         self.vel_y = 0
-        self.wall_jump_count = 0
+        self.last_wall_id = None
+        self.has_wall_jumped = False
         
     def draw(self, screen):
         pygame.draw.rect(screen, self.color, self.rect)
@@ -216,12 +266,12 @@ class Player:
         mouth_y = self.rect.top + 28
         pygame.draw.arc(screen, BLACK, (self.rect.left + 10, mouth_y, 20, 10), 0, math.pi, 2)
         
-        # Visual indicator for wall sliding - fixed to not use undefined platform variable
+        # Visual indicator for wall sliding
         if self.touching_wall and not self.on_ground:
-            # Just show a visual indicator on the side where the wall would be
-            if self.vel_x > 0:  # Was trying to move right, so wall is on the right
+            # Show a visual indicator on the side where the wall is
+            if self.wall_jump_direction == -1:  # Wall is on the right
                 pygame.draw.rect(screen, WHITE, (self.rect.right - 3, self.rect.y + 5, 3, self.rect.height - 10))
-            elif self.vel_x < 0:  # Was trying to move left, so wall is on the left
+            elif self.wall_jump_direction == 1:  # Wall is on the left
                 pygame.draw.rect(screen, WHITE, (self.rect.left, self.rect.y + 5, 3, self.rect.height - 10))
 
 class Platform:
@@ -547,7 +597,7 @@ def main():
             "Player 1: WASD to move",
             "Player 2: Arrow keys to move",
             "Players can stand on each other to reach higher platforms!",
-            "Wall slide and jump off walls up to 3 times!",
+            "Jump off walls to reach higher areas!",
             "Collect all coins and reach the flag together!",
             "Press 1, 2, or 3 to switch levels, R to restart, ESC to exit"
         ]
