@@ -1,6 +1,7 @@
-import pygame
+ import pygame
 import sys
 import math
+import random
 
 # Initialize Pygame
 pygame.init()
@@ -73,6 +74,10 @@ except Exception as e:
     coin_sound = DummySound()
     level_complete_sound = DummySound()
     jump_sound = DummySound()
+
+# Add these constants for the night sky
+NIGHT_SKY = (25, 25, 50)  # Dark blue for night sky
+STAR_COLOR = (255, 255, 200)  # Yellowish white for stars
 
 class Player:
     def __init__(self, x, y, color, player_num):
@@ -325,41 +330,101 @@ class Coin:
         pygame.draw.polygon(screen, BLACK, points, 2)
 
 class Goal:
-    def __init__(self, x, y):
+    def __init__(self, x, y, is_door=False):
         self.rect = pygame.Rect(x, y, 60, 80)
         self.color = GREEN
+        self.is_door = is_door  # Flag to determine if this is a door or flag
+        self.door_open = False  # Track if door is open
     
     def draw(self, screen):
-        # Draw flag pole
-        pygame.draw.rect(screen, BROWN, (self.rect.x + 25, self.rect.y, 10, self.rect.height))
-        # Draw flag
-        pygame.draw.polygon(screen, self.color, [
-            (self.rect.x + 35, self.rect.y),
-            (self.rect.x + 60, self.rect.y + 20),
-            (self.rect.x + 35, self.rect.y + 40)
-        ])
+        if self.is_door:
+            # Draw door
+            door_width = 60
+            door_height = 80
+            
+            if self.door_open:
+                # Draw open door (door frame only)
+                pygame.draw.rect(screen, BROWN, (self.rect.x, self.rect.y, door_width, door_height), 5)
+                # Draw open door (showing passage)
+                pygame.draw.rect(screen, BLACK, (self.rect.x + 5, self.rect.y + 5, door_width - 10, door_height - 10))
+                # Add some light effect to show it's open
+                pygame.draw.polygon(screen, (255, 255, 200), [
+                    (self.rect.x + 10, self.rect.y + 10),
+                    (self.rect.x + door_width - 10, self.rect.y + 10),
+                    (self.rect.x + door_width//2, self.rect.y + door_height//2)
+                ])
+            else:
+                # Door frame
+                pygame.draw.rect(screen, BROWN, (self.rect.x, self.rect.y, door_width, door_height))
+                # Door panel
+                pygame.draw.rect(screen, (139, 69, 19), (self.rect.x + 5, self.rect.y + 5, door_width - 10, door_height - 10))
+                # Door knob
+                pygame.draw.circle(screen, YELLOW, (self.rect.x + door_width - 15, self.rect.y + door_height // 2), 5)
+        else:
+            # Draw flag pole
+            pygame.draw.rect(screen, BROWN, (self.rect.x + 25, self.rect.y, 10, self.rect.height))
+            # Draw flag
+            pygame.draw.polygon(screen, self.color, [
+                (self.rect.x + 35, self.rect.y),
+                (self.rect.x + 60, self.rect.y + 20),
+                (self.rect.x + 35, self.rect.y + 40)
+            ])
+
+class Spike:
+    def __init__(self, x, y, width=30, height=15):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.color = (200, 200, 200)  # Silver/gray color for spikes
+    
+    def draw(self, screen):
+        # Draw the base of the spike
+        pygame.draw.rect(screen, self.color, (self.rect.x, self.rect.y + self.rect.height - 5, self.rect.width, 5))
+        
+        # Draw the triangular spikes
+        num_spikes = self.rect.width // 10
+        for i in range(num_spikes):
+            spike_x = self.rect.x + i * 10 + 5
+            pygame.draw.polygon(screen, self.color, [
+                (spike_x - 5, self.rect.y + self.rect.height - 5),  # Bottom left
+                (spike_x, self.rect.y),                            # Top middle
+                (spike_x + 5, self.rect.y + self.rect.height - 5)   # Bottom right
+            ])
 
 class LevelManager:
     def __init__(self):
         self.current_level = 1
-        self.max_levels = 3  # Total number of levels
+        self.current_world = 1
+        self.max_levels = 3
+        self.max_worlds = 2
+        
+    def get_level(self):
+        if self.current_world == 1:
+            if self.current_level == 1:
+                return create_level_1()
+            elif self.current_level == 2:
+                return create_level_2()
+            elif self.current_level == 3:
+                return create_level_3()
+        elif self.current_world == 2:
+            if self.current_level == 1:
+                return create_world2_level_1()
+            elif self.current_level == 2:
+                return create_world2_level_2()
+            elif self.current_level == 3:
+                return create_world2_level_3()
         
     def next_level(self):
         if self.current_level < self.max_levels:
             self.current_level += 1
             return True
+        elif self.current_world < self.max_worlds:
+            self.current_world += 1
+            self.current_level = 1
+            return True
         return False
     
     def reset(self):
         self.current_level = 1
-        
-    def get_level(self):
-        if self.current_level == 1:
-            return create_level_1()
-        elif self.current_level == 2:
-            return create_level_2()
-        elif self.current_level == 3:
-            return create_level_3()
+        self.current_world = 1
 
 def create_level_1():
     platforms = [
@@ -390,7 +455,7 @@ def create_level_1():
     
     total_coins = len(coins)  # Count the total coins
     
-    return platforms, coins, total_coins
+    return platforms, coins, total_coins, []  # Empty spikes list
 
 def create_level_2():
     platforms = [
@@ -430,7 +495,7 @@ def create_level_2():
     
     total_coins = len(coins)
     
-    return platforms, coins, total_coins
+    return platforms, coins, total_coins, []  # Empty spikes list
 
 def create_level_3():
     platforms = [
@@ -469,15 +534,186 @@ def create_level_3():
     
     total_coins = len(coins)
     
-    return platforms, coins, total_coins
+    return platforms, coins, total_coins, []  # Empty spikes list
 
-def update_goal_position(level):
-    if level == 1:
-        return Goal(SCREEN_WIDTH - 100, SCREEN_HEIGHT - 120)
-    elif level == 2:
-        return Goal(700, SCREEN_HEIGHT - 730)  # Positioned directly on the top platform
-    elif level == 3:
-        return Goal(700, SCREEN_HEIGHT - 830)  # At the top platform for level 3
+def create_world2_level_1():
+    platforms = [
+        # Floor with gaps
+        Platform(0, SCREEN_HEIGHT - 40, 300, 40),
+        Platform(500, SCREEN_HEIGHT - 40, 300, 40),
+        Platform(900, SCREEN_HEIGHT - 40, 200, 40),
+        
+        # Moving platforms pattern
+        Platform(100, SCREEN_HEIGHT - 150, 150, 20),
+        Platform(350, SCREEN_HEIGHT - 200, 150, 20),
+        Platform(600, SCREEN_HEIGHT - 250, 150, 20),
+        Platform(850, SCREEN_HEIGHT - 300, 150, 20),
+        
+        # Upper level
+        Platform(600, SCREEN_HEIGHT - 400, 400, 20),
+        
+        # Walls
+        Platform(0, 0, 20, SCREEN_HEIGHT - 40),
+        Platform(SCREEN_WIDTH - 20, 0, 20, SCREEN_HEIGHT - 40),
+    ]
+    
+    coins = [
+        Coin(150, SCREEN_HEIGHT - 200),
+        Coin(400, SCREEN_HEIGHT - 250),
+        Coin(650, SCREEN_HEIGHT - 300),
+        Coin(900, SCREEN_HEIGHT - 350),
+        Coin(700, SCREEN_HEIGHT - 450),
+        Coin(900, SCREEN_HEIGHT - 450),
+    ]
+    
+    # Add spikes in the gaps
+    spikes = [
+        Spike(300, SCREEN_HEIGHT - 40, 200),  # Spike in first gap
+        Spike(800, SCREEN_HEIGHT - 40, 100),  # Spike in second gap
+    ]
+    
+    total_coins = len(coins)
+    
+    return platforms, coins, total_coins, spikes
+
+def create_world2_level_2():
+    platforms = [
+        # Floor with larger gaps
+        Platform(0, SCREEN_HEIGHT - 40, 200, 40),
+        Platform(400, SCREEN_HEIGHT - 40, 200, 40),
+        Platform(800, SCREEN_HEIGHT - 40, 200, 40),
+        
+        # Vertical challenge
+        Platform(200, SCREEN_HEIGHT - 150, 100, 20),
+        Platform(400, SCREEN_HEIGHT - 250, 100, 20),
+        Platform(600, SCREEN_HEIGHT - 350, 100, 20),
+        Platform(800, SCREEN_HEIGHT - 450, 100, 20),
+        
+        # Wall jump challenge
+        Platform(300, SCREEN_HEIGHT - 350, 20, 200),  # Vertical wall
+        Platform(700, SCREEN_HEIGHT - 550, 20, 200),  # Vertical wall
+        
+        # Upper platform with goal
+        Platform(300, SCREEN_HEIGHT - 550, 500, 20),
+        
+        # Walls
+        Platform(0, 0, 20, SCREEN_HEIGHT - 40),
+        Platform(SCREEN_WIDTH - 20, 0, 20, SCREEN_HEIGHT - 40),
+    ]
+    
+    coins = [
+        Coin(250, SCREEN_HEIGHT - 200),
+        Coin(450, SCREEN_HEIGHT - 300),
+        Coin(650, SCREEN_HEIGHT - 400),
+        Coin(850, SCREEN_HEIGHT - 500),
+        Coin(350, SCREEN_HEIGHT - 600),
+        Coin(550, SCREEN_HEIGHT - 600),
+        Coin(750, SCREEN_HEIGHT - 600),
+    ]
+    
+    # Add spikes on some platforms
+    spikes = [
+        Spike(450, SCREEN_HEIGHT - 250 - 15),  # On second platform
+        Spike(650, SCREEN_HEIGHT - 350 - 15),  # On third platform
+        Spike(400, SCREEN_HEIGHT - 550 - 15, 100),  # On upper platform
+    ]
+    
+    total_coins = len(coins)
+    
+    return platforms, coins, total_coins, spikes
+
+def create_world2_level_3():
+    platforms = [
+        # Floor with very large gaps
+        Platform(0, SCREEN_HEIGHT - 40, 150, 40),
+        Platform(350, SCREEN_HEIGHT - 40, 150, 40),
+        Platform(700, SCREEN_HEIGHT - 40, 150, 40),
+        
+        # Wall jump maze
+        Platform(150, SCREEN_HEIGHT - 200, 20, 160),  # Vertical wall
+        Platform(170, SCREEN_HEIGHT - 200, 150, 20),
+        Platform(500, SCREEN_HEIGHT - 200, 20, 160),  # Vertical wall
+        Platform(350, SCREEN_HEIGHT - 200, 150, 20),
+        Platform(850, SCREEN_HEIGHT - 200, 20, 160),  # Vertical wall
+        Platform(700, SCREEN_HEIGHT - 200, 150, 20),
+        
+        # Middle section
+        Platform(250, SCREEN_HEIGHT - 350, 150, 20),
+        Platform(600, SCREEN_HEIGHT - 350, 150, 20),
+        Platform(400, SCREEN_HEIGHT - 450, 200, 20),
+        
+        # Upper section
+        Platform(200, SCREEN_HEIGHT - 550, 150, 20),
+        Platform(650, SCREEN_HEIGHT - 550, 150, 20),
+        Platform(350, SCREEN_HEIGHT - 650, 300, 20),  # Top platform with goal
+        
+        # Walls
+        Platform(0, 0, 20, SCREEN_HEIGHT - 40),
+        Platform(SCREEN_WIDTH - 20, 0, 20, SCREEN_HEIGHT - 40),
+    ]
+    
+    coins = [
+        Coin(250, SCREEN_HEIGHT - 250),
+        Coin(450, SCREEN_HEIGHT - 250),
+        Coin(750, SCREEN_HEIGHT - 250),
+        Coin(300, SCREEN_HEIGHT - 400),
+        Coin(700, SCREEN_HEIGHT - 400),
+        Coin(500, SCREEN_HEIGHT - 500),
+        Coin(250, SCREEN_HEIGHT - 600),
+        Coin(700, SCREEN_HEIGHT - 600),
+        Coin(500, SCREEN_HEIGHT - 700),
+    ]
+    
+    # Add spikes in strategic locations
+    spikes = [
+        Spike(150, SCREEN_HEIGHT - 40, 200),  # Between floor platforms
+        Spike(500, SCREEN_HEIGHT - 40, 200),  # Between floor platforms
+        Spike(400, SCREEN_HEIGHT - 450 - 15, 50),  # On middle platform
+        Spike(400, SCREEN_HEIGHT - 650 - 15, 50),  # On top platform
+    ]
+    
+    total_coins = len(coins)
+    
+    return platforms, coins, total_coins, spikes
+
+def update_goal_position(world, level):
+    is_door = (level == 3 and world < 2)  # It's a door if it's level 3 and not the last world
+    
+    if world == 1:
+        if level == 1:
+            return Goal(SCREEN_WIDTH - 100, SCREEN_HEIGHT - 120, is_door=False)
+        elif level == 2:
+            return Goal(700, SCREEN_HEIGHT - 730, is_door=False)  # Positioned directly on the top platform
+        elif level == 3:
+            return Goal(700, SCREEN_HEIGHT - 830, is_door=is_door)  # Door at the top platform for level 3
+    elif world == 2:
+        if level == 1:
+            return Goal(900, SCREEN_HEIGHT - 450, is_door=False)  # On the upper platform
+        elif level == 2:
+            return Goal(700, SCREEN_HEIGHT - 600, is_door=False)  # On the upper platform
+        elif level == 3:
+            return Goal(500, SCREEN_HEIGHT - 700, is_door=False)  # On the top platform
+
+# Create a Star class for the night sky background
+class Star:
+    def __init__(self):
+        self.x = random.randint(0, SCREEN_WIDTH)
+        self.y = random.randint(0, SCREEN_HEIGHT - 100)  # Keep stars above ground level
+        self.size = random.randint(1, 3)
+        self.twinkle_speed = random.uniform(0.01, 0.05)
+        self.brightness = random.uniform(0.5, 1.0)
+        self.twinkle_offset = random.uniform(0, 2 * math.pi)
+    
+    def update(self, time):
+        # Make stars twinkle by varying brightness
+        self.brightness = 0.5 + 0.5 * math.sin(time * self.twinkle_speed + self.twinkle_offset)
+    
+    def draw(self, screen):
+        # Calculate color based on brightness
+        color = (int(STAR_COLOR[0] * self.brightness), 
+                 int(STAR_COLOR[1] * self.brightness), 
+                 int(STAR_COLOR[2] * self.brightness))
+        pygame.draw.circle(screen, color, (self.x, self.y), self.size)
 
 def main():
     # Create game objects
@@ -485,16 +721,23 @@ def main():
     player2 = Player(150, SCREEN_HEIGHT - 100, RED, 2)
     
     level_manager = LevelManager()
-    platforms, coins, total_coins = level_manager.get_level()
+    platforms, coins, total_coins, spikes = level_manager.get_level()
     
     # Set goal position based on level
-    goal = update_goal_position(level_manager.current_level)
+    goal = update_goal_position(level_manager.current_world, level_manager.current_level)
+    
+    # Create stars for night sky (World 2)
+    stars = [Star() for _ in range(100)]
     
     running = True
     game_complete = False
     all_levels_complete = False
+    time_elapsed = 0  # For star twinkling
+    show_spike_message = False
+    spike_message_timer = 0
     
     while running:
+        time_elapsed += 0.1  # Increment time for animations
         keys_pressed = pygame.key.get_pressed()
         
         # Handle events
@@ -515,8 +758,8 @@ def main():
                         level_manager.reset()
                         all_levels_complete = False
                     
-                    platforms, coins, total_coins = level_manager.get_level()
-                    goal = update_goal_position(level_manager.current_level)  # Update goal position
+                    platforms, coins, total_coins, spikes = level_manager.get_level()
+                    goal = update_goal_position(level_manager.current_world, level_manager.current_level)  # Update goal position
                     game_complete = False
                 elif event.key == pygame.K_n and game_complete and not all_levels_complete:
                     # Next level
@@ -525,9 +768,22 @@ def main():
                         player2.respawn()
                         player1.collected_coins = 0
                         player2.collected_coins = 0
-                        platforms, coins, total_coins = level_manager.get_level()
-                        goal = update_goal_position(level_manager.current_level)  # Update goal position
+                        platforms, coins, total_coins, spikes = level_manager.get_level()
+                        goal = update_goal_position(level_manager.current_world, level_manager.current_level)  # Update goal position
                         game_complete = False
+                        
+                        # Show world transition message if we just moved to a new world
+                        if level_manager.current_level == 1 and level_manager.current_world > 1:
+                            # Display world transition message
+                            transition_text = font_large.render(f"ENTERING WORLD {level_manager.current_world}!", True, GREEN)
+                            transition_rect = transition_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
+                            pygame.draw.rect(screen, WHITE, transition_rect.inflate(40, 20))
+                            pygame.draw.rect(screen, BLACK, transition_rect.inflate(40, 20), 3)
+                            screen.blit(transition_text, transition_rect)
+                            
+                            # Update display and pause briefly
+                            pygame.display.flip()
+                            pygame.time.delay(2000)  # 2 second pause
                     else:
                         all_levels_complete = True
                 # Level selection shortcuts
@@ -538,8 +794,8 @@ def main():
                     player2.respawn()
                     player1.collected_coins = 0
                     player2.collected_coins = 0
-                    platforms, coins, total_coins = level_manager.get_level()
-                    goal = update_goal_position(level_manager.current_level)
+                    platforms, coins, total_coins, spikes = level_manager.get_level()
+                    goal = update_goal_position(level_manager.current_world, level_manager.current_level)
                     game_complete = False
                     all_levels_complete = False
                 elif event.key == pygame.K_2:
@@ -549,8 +805,8 @@ def main():
                     player2.respawn()
                     player1.collected_coins = 0
                     player2.collected_coins = 0
-                    platforms, coins, total_coins = level_manager.get_level()
-                    goal = update_goal_position(level_manager.current_level)
+                    platforms, coins, total_coins, spikes = level_manager.get_level()
+                    goal = update_goal_position(level_manager.current_world, level_manager.current_level)
                     game_complete = False
                     all_levels_complete = False
                 elif event.key == pygame.K_3:
@@ -560,8 +816,8 @@ def main():
                     player2.respawn()
                     player1.collected_coins = 0
                     player2.collected_coins = 0
-                    platforms, coins, total_coins = level_manager.get_level()
-                    goal = update_goal_position(level_manager.current_level)
+                    platforms, coins, total_coins, spikes = level_manager.get_level()
+                    goal = update_goal_position(level_manager.current_world, level_manager.current_level)
                     game_complete = False
                     all_levels_complete = False
         
@@ -569,6 +825,30 @@ def main():
             # Update game objects
             player1.update(platforms, coins, keys_pressed, [player2])
             player2.update(platforms, coins, keys_pressed, [player1])
+            
+            # Check for spike collisions
+            spike_collision = False
+            for spike in spikes:
+                if player1.rect.colliderect(spike.rect) or player2.rect.colliderect(spike.rect):
+                    spike_collision = True
+                    break
+            
+            if spike_collision:
+                # Save current world
+                current_world = level_manager.current_world
+                
+                # Reset to level 1 of current world
+                level_manager.current_level = 1
+                player1.respawn()
+                player2.respawn()
+                player1.collected_coins = 0
+                player2.collected_coins = 0
+                platforms, coins, total_coins, spikes = level_manager.get_level()
+                goal = update_goal_position(level_manager.current_world, level_manager.current_level)
+                
+                # Show spike message
+                show_spike_message = True
+                spike_message_timer = 60  # Show for 60 frames (1 second at 60 FPS)
             
             for coin in coins:
                 coin.update()
@@ -579,16 +859,27 @@ def main():
                 len(coins) == 0):
                 game_complete = True
             
-            # Update player faces based on coin collection
+            # Update player faces and door based on coin collection
             if len(coins) == 0:
                 player1.happy_face = True
                 player2.happy_face = True
+                if goal.is_door:
+                    goal.door_open = True
             else:
                 player1.happy_face = False
                 player2.happy_face = False
+                if goal.is_door:
+                    goal.door_open = False
         
         # Draw everything
-        screen.fill((135, 206, 235))  # Sky blue
+        if level_manager.current_world == 1:
+            screen.fill((135, 206, 235))  # Sky blue for day time (World 1)
+        else:
+            screen.fill(NIGHT_SKY)  # Dark blue for night time (World 2)
+            # Update and draw stars
+            for star in stars:
+                star.update(time_elapsed)
+                star.draw(screen)
         
         # Draw platforms
         for platform in platforms:
@@ -605,13 +896,33 @@ def main():
         player1.draw(screen)
         player2.draw(screen)
         
+        # Draw spikes
+        for spike in spikes:
+            spike.draw(screen)
+        
+        # Draw spike message if needed
+        if show_spike_message:
+            spike_message_timer -= 1
+            if spike_message_timer <= 0:
+                show_spike_message = False
+            
+            message_text = font_large.render("DANGER! SPIKES!", True, RED)
+            message_rect = message_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 50))
+            pygame.draw.rect(screen, WHITE, message_rect.inflate(40, 20))
+            pygame.draw.rect(screen, BLACK, message_rect.inflate(40, 20), 3)
+            screen.blit(message_text, message_rect)
+            
+            sub_message = font_medium.render("Returning to beginning of world...", True, BLACK)
+            sub_rect = sub_message.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 20))
+            screen.blit(sub_message, sub_rect)
+        
         # Draw UI
         collected_coins = player1.collected_coins + player2.collected_coins
         score_text = font_medium.render(f"Coins: {collected_coins}/{total_coins}", True, BLACK)
         screen.blit(score_text, (20, 20))
         
-        # Display current level
-        level_text = font_medium.render(f"Level: {level_manager.current_level}/{level_manager.max_levels}", True, BLACK)
+        # Display current world and level
+        level_text = font_medium.render(f"World: {level_manager.current_world} Level: {level_manager.current_level}", True, BLACK)
         screen.blit(level_text, (20, 60))
         
         # Draw instructions
@@ -631,24 +942,30 @@ def main():
         if game_complete:
             if all_levels_complete:
                 # Final victory message
-                victory_text = font_large.render("ALL LEVELS COMPLETE!", True, GREEN)
+                victory_text = font_large.render("ALL WORLDS COMPLETE!", True, GREEN)
                 victory_rect = victory_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
                 pygame.draw.rect(screen, WHITE, victory_rect.inflate(40, 20))
                 pygame.draw.rect(screen, BLACK, victory_rect.inflate(40, 20), 3)
                 screen.blit(victory_text, victory_rect)
                 
-                continue_text = font_medium.render("Press R to play again from level 1", True, BLACK)
+                continue_text = font_medium.render("Press R to play again from World 1", True, BLACK)
                 continue_rect = continue_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 80))
                 screen.blit(continue_text, continue_rect)
             else:
                 # Level complete message
-                victory_text = font_large.render(f"LEVEL {level_manager.current_level} COMPLETE!", True, GREEN)
+                if level_manager.current_level == 3 and level_manager.current_world < level_manager.max_worlds:
+                    # End of world message
+                    victory_text = font_large.render(f"WORLD {level_manager.current_world} COMPLETE!", True, GREEN)
+                else:
+                    # Regular level complete message
+                    victory_text = font_large.render(f"WORLD {level_manager.current_world} LEVEL {level_manager.current_level} COMPLETE!", True, GREEN)
+                    
                 victory_rect = victory_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
                 pygame.draw.rect(screen, WHITE, victory_rect.inflate(40, 20))
                 pygame.draw.rect(screen, BLACK, victory_rect.inflate(40, 20), 3)
                 screen.blit(victory_text, victory_rect)
                 
-                if level_manager.current_level < level_manager.max_levels:
+                if level_manager.current_level < level_manager.max_levels or level_manager.current_world < level_manager.max_worlds:
                     continue_text = font_medium.render("Press N for next level or R to replay", True, BLACK)
                 else:
                     continue_text = font_medium.render("Press N to finish or R to replay", True, BLACK)
