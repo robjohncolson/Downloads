@@ -87,6 +87,11 @@ class Player:
         self.spawn_y = y
         self.collected_coins = 0
         self.standing_on_player = False  # New attribute to track if standing on another player
+        self.touching_wall = False  # New attribute to track wall contact
+        self.can_wall_jump = False  # New attribute to allow wall jumping
+        self.wall_slide_speed = 2  # Slower falling speed when wall sliding
+        self.wall_jump_count = 0  # Count wall jumps
+        self.max_wall_jumps = 3  # Maximum number of wall jumps before touching ground
         
     def update(self, platforms, coins, keys_pressed, other_players=None):
         # Handle input
@@ -98,11 +103,16 @@ class Player:
             else:
                 self.vel_x *= FRICTION
                 
-            if keys_pressed[pygame.K_w] and (self.on_ground or self.standing_on_player):
+            if keys_pressed[pygame.K_w] and (self.on_ground or self.standing_on_player or self.can_wall_jump):
                 self.vel_y = JUMP_STRENGTH
                 self.is_jumping = True
+                if self.can_wall_jump:
+                    self.wall_jump_count += 1  # Increment wall jump counter
+                    if self.wall_jump_count >= self.max_wall_jumps:
+                        self.can_wall_jump = False  # Use up all wall jumps
                 jump_sound.play()  # Play jump sound
-        else:  # Player 2
+                
+        elif self.player_num == 2:
             if keys_pressed[pygame.K_LEFT]:
                 self.vel_x = -MOVE_SPEED
             elif keys_pressed[pygame.K_RIGHT]:
@@ -110,102 +120,109 @@ class Player:
             else:
                 self.vel_x *= FRICTION
                 
-            if keys_pressed[pygame.K_UP] and (self.on_ground or self.standing_on_player):
+            if keys_pressed[pygame.K_UP] and (self.on_ground or self.standing_on_player or self.can_wall_jump):
                 self.vel_y = JUMP_STRENGTH
                 self.is_jumping = True
+                if self.can_wall_jump:
+                    self.wall_jump_count += 1  # Increment wall jump counter
+                    if self.wall_jump_count >= self.max_wall_jumps:
+                        self.can_wall_jump = False  # Use up all wall jumps
                 jump_sound.play()  # Play jump sound
         
         # Apply gravity
         self.vel_y += GRAVITY
-        if self.vel_y > 20:  # Terminal velocity
-            self.vel_y = 20
+        
+        # Apply wall sliding (slower falling when touching wall)
+        if self.touching_wall and self.vel_y > 0 and not self.on_ground:
+            self.vel_y = self.wall_slide_speed
         
         # Move horizontally
-        self.rect.x += self.vel_x
-        self.check_platform_collisions(platforms, 'horizontal')
-        if other_players:
-            self.check_player_collisions(other_players, 'horizontal')
+        self.rect.x += int(self.vel_x)
+        
+        # Check for horizontal collisions
+        self.touching_wall = False  # Reset wall contact status
+        for platform in platforms:
+            if self.rect.colliderect(platform.rect):
+                if self.vel_x > 0:  # Moving right
+                    self.rect.right = platform.rect.left
+                    self.touching_wall = True
+                elif self.vel_x < 0:  # Moving left
+                    self.rect.left = platform.rect.right
+                    self.touching_wall = True
+                self.vel_x = 0
+        
+        # Enable wall jump if touching a wall and not on ground
+        if self.touching_wall and not self.on_ground:
+            self.can_wall_jump = True
         
         # Move vertically
-        self.rect.y += self.vel_y
+        self.rect.y += int(self.vel_y)
+        
+        # Check for vertical collisions
         self.on_ground = False
         self.standing_on_player = False
-        self.check_platform_collisions(platforms, 'vertical')
+        
+        for platform in platforms:
+            if self.rect.colliderect(platform.rect):
+                if self.vel_y > 0:  # Falling
+                    self.rect.bottom = platform.rect.top
+                    self.on_ground = True
+                elif self.vel_y < 0:  # Jumping
+                    self.rect.top = platform.rect.bottom
+                self.vel_y = 0
+        
+        # Check if standing on another player
         if other_players:
-            self.check_player_collisions(other_players, 'vertical')
+            for other in other_players:
+                if (self.rect.bottom == other.rect.top + 1 and 
+                    self.rect.right > other.rect.left and 
+                    self.rect.left < other.rect.right):
+                    self.standing_on_player = True
         
         # Collect coins
-        for coin in coins[:]:
+        for coin in coins[:]:  # Create a copy of the list to safely remove items
             if self.rect.colliderect(coin.rect):
                 coins.remove(coin)
                 self.collected_coins += 1
-                coin_sound.play()  # Play coin collection sound
+                coin_sound.play()  # Play coin sound
         
-        # Keep player on screen
-        self.rect.x = max(0, min(self.rect.x, SCREEN_WIDTH - self.rect.width))
-        
-        # Reset if fallen off screen
-        if self.rect.y > SCREEN_HEIGHT:
-            self.respawn()
-    
-    def check_platform_collisions(self, platforms, direction):
-        for platform in platforms:
-            if self.rect.colliderect(platform.rect):
-                if direction == 'horizontal':
-                    if self.vel_x > 0:  # Moving right
-                        self.rect.right = platform.rect.left
-                    elif self.vel_x < 0:  # Moving left
-                        self.rect.left = platform.rect.right
-                    self.vel_x = 0
-                elif direction == 'vertical':
-                    if self.vel_y > 0:  # Falling
-                        self.rect.bottom = platform.rect.top
-                        self.vel_y = 0
-                        self.on_ground = True
-                        self.is_jumping = False
-                    elif self.vel_y < 0:  # Jumping
-                        self.rect.top = platform.rect.bottom
-                        self.vel_y = 0
-    
-    def check_player_collisions(self, other_players, direction):
-        for player in other_players:
-            if player != self and self.rect.colliderect(player.rect):
-                if direction == 'horizontal':
-                    if self.vel_x > 0:  # Moving right
-                        self.rect.right = player.rect.left
-                    elif self.vel_x < 0:  # Moving left
-                        self.rect.left = player.rect.right
-                    self.vel_x = 0
-                elif direction == 'vertical':
-                    if self.vel_y > 0:  # Falling onto another player
-                        # Only stand on top if we're mostly above them
-                        if self.rect.bottom - self.vel_y <= player.rect.top + 10:
-                            self.rect.bottom = player.rect.top
-                            self.vel_y = 0
-                            self.standing_on_player = True
-                            self.is_jumping = False
-                    elif self.vel_y < 0:  # Jumping into player from below
-                        self.rect.top = player.rect.bottom
-                        self.vel_y = 0
-    
+        # Reset jumping state and wall jump count if on ground
+        if self.on_ground:
+            self.is_jumping = False
+            self.wall_jump_count = 0  # Reset wall jump counter when touching ground
+            
     def respawn(self):
         self.rect.x = self.spawn_x
         self.rect.y = self.spawn_y
         self.vel_x = 0
         self.vel_y = 0
-    
+        self.wall_jump_count = 0
+        
     def draw(self, screen):
         pygame.draw.rect(screen, self.color, self.rect)
         pygame.draw.rect(screen, BLACK, self.rect, 2)
         
-        # Draw player number
-        text = font_small.render(f"P{self.player_num}", True, WHITE)
-        text_rect = text.get_rect(center=self.rect.center)
-        screen.blit(text, text_rect)
+        # Draw eyes
+        eye_size = 8
+        pygame.draw.circle(screen, WHITE, (self.rect.left + 12, self.rect.top + 15), eye_size)
+        pygame.draw.circle(screen, WHITE, (self.rect.right - 12, self.rect.top + 15), eye_size)
         
-        # Visual indicator when standing on another player
-        if self.standing_on_player:
-            pygame.draw.rect(screen, WHITE, (self.rect.x, self.rect.bottom - 3, self.rect.width, 3))
+        # Draw pupils
+        pupil_size = 4
+        pygame.draw.circle(screen, BLACK, (self.rect.left + 12, self.rect.top + 15), pupil_size)
+        pygame.draw.circle(screen, BLACK, (self.rect.right - 12, self.rect.top + 15), pupil_size)
+        
+        # Draw mouth
+        mouth_y = self.rect.top + 28
+        pygame.draw.arc(screen, BLACK, (self.rect.left + 10, mouth_y, 20, 10), 0, math.pi, 2)
+        
+        # Visual indicator for wall sliding - fixed to not use undefined platform variable
+        if self.touching_wall and not self.on_ground:
+            # Just show a visual indicator on the side where the wall would be
+            if self.vel_x > 0:  # Was trying to move right, so wall is on the right
+                pygame.draw.rect(screen, WHITE, (self.rect.right - 3, self.rect.y + 5, 3, self.rect.height - 10))
+            elif self.vel_x < 0:  # Was trying to move left, so wall is on the left
+                pygame.draw.rect(screen, WHITE, (self.rect.left, self.rect.y + 5, 3, self.rect.height - 10))
 
 class Platform:
     def __init__(self, x, y, width, height, color=BROWN):
@@ -253,6 +270,28 @@ class Goal:
             (self.rect.x + 35, self.rect.y + 40)
         ])
 
+class LevelManager:
+    def __init__(self):
+        self.current_level = 1
+        self.max_levels = 3  # Total number of levels
+        
+    def next_level(self):
+        if self.current_level < self.max_levels:
+            self.current_level += 1
+            return True
+        return False
+    
+    def reset(self):
+        self.current_level = 1
+        
+    def get_level(self):
+        if self.current_level == 1:
+            return create_level_1()
+        elif self.current_level == 2:
+            return create_level_2()
+        elif self.current_level == 3:
+            return create_level_3()
+
 def create_level_1():
     platforms = [
         # Floor
@@ -284,16 +323,112 @@ def create_level_1():
     
     return platforms, coins, total_coins
 
+def create_level_2():
+    platforms = [
+        # Floor
+        Platform(0, SCREEN_HEIGHT - 40, SCREEN_WIDTH, 40),
+        
+        # Platforms - more accessible arrangement with longer platforms
+        Platform(100, SCREEN_HEIGHT - 150, 200, 20),  # Made longer (150->200)
+        Platform(400, SCREEN_HEIGHT - 200, 200, 20),  # Made longer (150->200)
+        Platform(600, SCREEN_HEIGHT - 250, 200, 20),  # Moved left from 700 to 600
+        Platform(300, SCREEN_HEIGHT - 350, 150, 20),  # Moved down from 400 to 350
+        Platform(600, SCREEN_HEIGHT - 450, 150, 20),
+        Platform(200, SCREEN_HEIGHT - 550, 150, 20),
+        # Add connecting platforms to make level completable
+        Platform(500, SCREEN_HEIGHT - 650, 400, 20),  # Top platform with goal
+        # Add some connecting platforms - removing both problematic bridges
+        # Platform(250, SCREEN_HEIGHT - 350, 50, 20),  # Removed this bridge
+        # Platform(550, SCREEN_HEIGHT - 350, 50, 20),  # Removing this bridge that blocks progress
+        Platform(450, SCREEN_HEIGHT - 550, 50, 20),  # Bridge
+        
+        # Walls
+        Platform(0, 0, 20, SCREEN_HEIGHT - 40),
+        Platform(SCREEN_WIDTH - 20, 0, 20, SCREEN_HEIGHT - 40),
+    ]
+    
+    # Adjust coin position for the moved platform
+    coins = [
+        Coin(150, SCREEN_HEIGHT - 200),
+        Coin(450, SCREEN_HEIGHT - 250),
+        Coin(650, SCREEN_HEIGHT - 300),  # Adjusted for moved platform
+        Coin(350, SCREEN_HEIGHT - 400),  # Adjusted for moved platform
+        Coin(650, SCREEN_HEIGHT - 500),
+        Coin(250, SCREEN_HEIGHT - 600),
+        Coin(550, SCREEN_HEIGHT - 700),
+        Coin(700, SCREEN_HEIGHT - 700),
+    ]
+    
+    total_coins = len(coins)
+    
+    return platforms, coins, total_coins
+
+def create_level_3():
+    platforms = [
+        # Floor - with gaps!
+        Platform(0, SCREEN_HEIGHT - 40, 300, 40),
+        Platform(400, SCREEN_HEIGHT - 40, 300, 40),
+        Platform(800, SCREEN_HEIGHT - 40, 300, 40),
+        
+        # Platforms - complex arrangement
+        Platform(150, SCREEN_HEIGHT - 150, 100, 20),
+        Platform(350, SCREEN_HEIGHT - 200, 100, 20),
+        Platform(550, SCREEN_HEIGHT - 250, 100, 20),
+        Platform(750, SCREEN_HEIGHT - 300, 100, 20),
+        Platform(950, SCREEN_HEIGHT - 350, 100, 20),
+        Platform(750, SCREEN_HEIGHT - 450, 100, 20),
+        Platform(550, SCREEN_HEIGHT - 550, 100, 20),
+        Platform(350, SCREEN_HEIGHT - 650, 100, 20),
+        Platform(150, SCREEN_HEIGHT - 750, 800, 20),  # Top platform with goal
+        
+        # Walls
+        Platform(0, 0, 20, SCREEN_HEIGHT - 40),
+        Platform(SCREEN_WIDTH - 20, 0, 20, SCREEN_HEIGHT - 40),
+        
+        # Additional obstacles
+        Platform(300, SCREEN_HEIGHT - 350, 20, 150),  # Vertical obstacle
+        Platform(700, SCREEN_HEIGHT - 600, 20, 150),  # Vertical obstacle
+    ]
+    
+    coins = [
+        Coin(200, SCREEN_HEIGHT - 200),
+        Coin(400, SCREEN_HEIGHT - 250),
+        Coin(600, SCREEN_HEIGHT - 300),
+        Coin(800, SCREEN_HEIGHT - 350),
+        Coin(1000, SCREEN_HEIGHT - 400),
+        Coin(800, SCREEN_HEIGHT - 500),
+        Coin(600, SCREEN_HEIGHT - 600),
+        Coin(400, SCREEN_HEIGHT - 700),
+        Coin(200, SCREEN_HEIGHT - 800),
+        Coin(600, SCREEN_HEIGHT - 800),
+    ]
+    
+    total_coins = len(coins)
+    
+    return platforms, coins, total_coins
+
+def update_goal_position(level):
+    if level == 1:
+        return Goal(SCREEN_WIDTH - 100, SCREEN_HEIGHT - 120)
+    elif level == 2:
+        return Goal(700, SCREEN_HEIGHT - 730)  # Positioned directly on the top platform
+    elif level == 3:
+        return Goal(SCREEN_WIDTH - 100, SCREEN_HEIGHT - 830)  # At the top platform for level 3
+
 def main():
     # Create game objects
     player1 = Player(100, SCREEN_HEIGHT - 100, BLUE, 1)
     player2 = Player(150, SCREEN_HEIGHT - 100, RED, 2)
     
-    platforms, coins, total_coins = create_level_1()
-    goal = Goal(SCREEN_WIDTH - 100, SCREEN_HEIGHT - 120)
+    level_manager = LevelManager()
+    platforms, coins, total_coins = level_manager.get_level()
+    
+    # Set goal position based on level
+    goal = update_goal_position(level_manager.current_level)
     
     running = True
     game_complete = False
+    all_levels_complete = False
     
     while running:
         keys_pressed = pygame.key.get_pressed()
@@ -311,8 +446,60 @@ def main():
                     player2.respawn()
                     player1.collected_coins = 0
                     player2.collected_coins = 0
-                    platforms, coins, total_coins = create_level_1()
+                    
+                    if all_levels_complete:
+                        level_manager.reset()
+                        all_levels_complete = False
+                    
+                    platforms, coins, total_coins = level_manager.get_level()
+                    goal = update_goal_position(level_manager.current_level)  # Update goal position
                     game_complete = False
+                elif event.key == pygame.K_n and game_complete and not all_levels_complete:
+                    # Next level
+                    if level_manager.next_level():
+                        player1.respawn()
+                        player2.respawn()
+                        player1.collected_coins = 0
+                        player2.collected_coins = 0
+                        platforms, coins, total_coins = level_manager.get_level()
+                        goal = update_goal_position(level_manager.current_level)  # Update goal position
+                        game_complete = False
+                    else:
+                        all_levels_complete = True
+                # Level selection shortcuts
+                elif event.key == pygame.K_1:
+                    # Switch to level 1
+                    level_manager.current_level = 1
+                    player1.respawn()
+                    player2.respawn()
+                    player1.collected_coins = 0
+                    player2.collected_coins = 0
+                    platforms, coins, total_coins = level_manager.get_level()
+                    goal = update_goal_position(level_manager.current_level)
+                    game_complete = False
+                    all_levels_complete = False
+                elif event.key == pygame.K_2:
+                    # Switch to level 2
+                    level_manager.current_level = 2
+                    player1.respawn()
+                    player2.respawn()
+                    player1.collected_coins = 0
+                    player2.collected_coins = 0
+                    platforms, coins, total_coins = level_manager.get_level()
+                    goal = update_goal_position(level_manager.current_level)
+                    game_complete = False
+                    all_levels_complete = False
+                elif event.key == pygame.K_3:
+                    # Switch to level 3
+                    level_manager.current_level = 3
+                    player1.respawn()
+                    player2.respawn()
+                    player1.collected_coins = 0
+                    player2.collected_coins = 0
+                    platforms, coins, total_coins = level_manager.get_level()
+                    goal = update_goal_position(level_manager.current_level)
+                    game_complete = False
+                    all_levels_complete = False
         
         if not game_complete:
             # Update game objects
@@ -351,13 +538,18 @@ def main():
         score_text = font_medium.render(f"Coins: {collected_coins}/{total_coins}", True, BLACK)
         screen.blit(score_text, (20, 20))
         
+        # Display current level
+        level_text = font_medium.render(f"Level: {level_manager.current_level}/{level_manager.max_levels}", True, BLACK)
+        screen.blit(level_text, (20, 60))
+        
         # Draw instructions
         instructions = [
             "Player 1: WASD to move",
             "Player 2: Arrow keys to move",
             "Players can stand on each other to reach higher platforms!",
+            "Wall slide and jump off walls up to 3 times!",
             "Collect all coins and reach the flag together!",
-            "Press R to restart level, ESC to exit"
+            "Press 1, 2, or 3 to switch levels, R to restart, ESC to exit"
         ]
         
         for i, instruction in enumerate(instructions):
@@ -365,16 +557,32 @@ def main():
             screen.blit(inst_text, (20, SCREEN_HEIGHT - 100 + i * 25))
         
         if game_complete:
-            # Victory message
-            victory_text = font_large.render("LEVEL COMPLETE!", True, GREEN)
-            victory_rect = victory_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
-            pygame.draw.rect(screen, WHITE, victory_rect.inflate(40, 20))
-            pygame.draw.rect(screen, BLACK, victory_rect.inflate(40, 20), 3)
-            screen.blit(victory_text, victory_rect)
-            
-            continue_text = font_medium.render("Press R to play again", True, BLACK)
-            continue_rect = continue_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 80))
-            screen.blit(continue_text, continue_rect)
+            if all_levels_complete:
+                # Final victory message
+                victory_text = font_large.render("ALL LEVELS COMPLETE!", True, GREEN)
+                victory_rect = victory_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
+                pygame.draw.rect(screen, WHITE, victory_rect.inflate(40, 20))
+                pygame.draw.rect(screen, BLACK, victory_rect.inflate(40, 20), 3)
+                screen.blit(victory_text, victory_rect)
+                
+                continue_text = font_medium.render("Press R to play again from level 1", True, BLACK)
+                continue_rect = continue_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 80))
+                screen.blit(continue_text, continue_rect)
+            else:
+                # Level complete message
+                victory_text = font_large.render(f"LEVEL {level_manager.current_level} COMPLETE!", True, GREEN)
+                victory_rect = victory_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
+                pygame.draw.rect(screen, WHITE, victory_rect.inflate(40, 20))
+                pygame.draw.rect(screen, BLACK, victory_rect.inflate(40, 20), 3)
+                screen.blit(victory_text, victory_rect)
+                
+                if level_manager.current_level < level_manager.max_levels:
+                    continue_text = font_medium.render("Press N for next level or R to replay", True, BLACK)
+                else:
+                    continue_text = font_medium.render("Press N to finish or R to replay", True, BLACK)
+                    
+                continue_rect = continue_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 80))
+                screen.blit(continue_text, continue_rect)
         
         # Play level complete sound when game is won
         if (player1.rect.colliderect(goal.rect) and 
