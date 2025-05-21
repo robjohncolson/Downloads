@@ -94,14 +94,14 @@ class Player:
         self.last_wall_id = None  # Track the last wall we jumped from
         self.bounce_timer = 0  # Timer to enforce bounce direction
         self.ignore_wall_contact = False  # Flag to ignore wall contact during bounce
-        self.has_wall_jumped = False  # Flag to track if player has performed a wall jump
+        self.happy_face = False  # New attribute to track if player should show happy face
         
     def update(self, platforms, coins, keys_pressed, other_players=None):
         # Handle bounce timer
         if self.bounce_timer > 0:
             self.bounce_timer -= 1
-            # Force velocity in bounce direction while timer is active - back to default force
-            self.vel_x = self.wall_jump_direction * MOVE_SPEED * 1.5  # Back to default 1.5
+            # Force velocity in bounce direction while timer is active
+            self.vel_x = self.wall_jump_direction * MOVE_SPEED * 1.5
             
             # While bouncing, ignore wall contact with the same wall
             self.ignore_wall_contact = True
@@ -119,19 +119,18 @@ class Player:
                 
             # Check if player can jump
             can_normal_jump = self.on_ground or self.standing_on_player
-            can_do_wall_jump = self.can_wall_jump and not self.has_wall_jumped
+            can_do_wall_jump = self.can_wall_jump
             
             if keys_pressed[pygame.K_w] and self.bounce_timer <= 0 and (can_normal_jump or can_do_wall_jump):
                 self.vel_y = JUMP_STRENGTH
                 self.is_jumping = True
                 
-                if self.can_wall_jump and not self.has_wall_jumped:
-                    # Apply horizontal bounce away from wall with default force
-                    self.vel_x = self.wall_jump_direction * MOVE_SPEED * 1.5  # Back to default 1.5
+                if self.can_wall_jump:
+                    # Apply horizontal bounce away from wall
+                    self.vel_x = self.wall_jump_direction * MOVE_SPEED * 1.5
                     self.can_wall_jump = False  # Use up the wall jump
-                    self.has_wall_jumped = True  # Mark that player has wall jumped
                     # Briefly prevent player from overriding the bounce direction
-                    self.bounce_timer = 10  # Back to original 10 frames
+                    self.bounce_timer = 10
                 
                 jump_sound.play()  # Play jump sound
                 
@@ -145,19 +144,18 @@ class Player:
                 
             # Check if player can jump
             can_normal_jump = self.on_ground or self.standing_on_player
-            can_do_wall_jump = self.can_wall_jump and not self.has_wall_jumped
+            can_do_wall_jump = self.can_wall_jump
             
             if keys_pressed[pygame.K_UP] and self.bounce_timer <= 0 and (can_normal_jump or can_do_wall_jump):
                 self.vel_y = JUMP_STRENGTH
                 self.is_jumping = True
                 
-                if self.can_wall_jump and not self.has_wall_jumped:
-                    # Apply horizontal bounce away from wall with default force
-                    self.vel_x = self.wall_jump_direction * MOVE_SPEED * 1.5  # Back to default 1.5
+                if self.can_wall_jump:
+                    # Apply horizontal bounce away from wall
+                    self.vel_x = self.wall_jump_direction * MOVE_SPEED * 1.5
                     self.can_wall_jump = False  # Use up the wall jump
-                    self.has_wall_jumped = True  # Mark that player has wall jumped
                     # Briefly prevent player from overriding the bounce direction
-                    self.bounce_timer = 10  # Back to original 10 frames
+                    self.bounce_timer = 10
                 
                 jump_sound.play()  # Play jump sound
         
@@ -171,7 +169,7 @@ class Player:
         # Move horizontally
         self.rect.x += int(self.vel_x)
         
-        # Check for horizontal collisions
+        # Check for horizontal collisions with platforms
         self.touching_wall = False  # Reset wall contact status
         current_wall_id = None
         
@@ -193,20 +191,25 @@ class Player:
                         current_wall_id = id(platform)  # Use platform's memory address as unique ID
                 self.vel_x = 0
         
-        # Enable wall jump if touching a wall, not on ground, and it's a different wall
-        # AND player hasn't already used their wall jump
-        if self.touching_wall and not self.on_ground and current_wall_id != self.last_wall_id and not self.has_wall_jumped:
+        # Check for horizontal collisions with other players
+        if other_players:
+            for other in other_players:
+                if self.rect.colliderect(other.rect):
+                    if self.vel_x > 0:  # Moving right
+                        self.rect.right = other.rect.left
+                    elif self.vel_x < 0:  # Moving left
+                        self.rect.left = other.rect.right
+                    self.vel_x = 0
+        
+        # Enable wall jump if touching a wall and not on ground
+        if self.touching_wall and not self.on_ground and current_wall_id != self.last_wall_id:
             self.can_wall_jump = True
             self.last_wall_id = current_wall_id  # Remember this wall
-        else:
-            # If player has already wall jumped, don't allow another wall jump
-            if self.has_wall_jumped:
-                self.can_wall_jump = False
         
         # Move vertically
         self.rect.y += int(self.vel_y)
         
-        # Check for vertical collisions
+        # Check for vertical collisions with platforms
         self.on_ground = False
         self.standing_on_player = False
         
@@ -219,7 +222,19 @@ class Player:
                     self.rect.top = platform.rect.bottom
                 self.vel_y = 0
         
-        # Check if standing on another player
+        # Check for vertical collisions with other players
+        if other_players:
+            for other in other_players:
+                if self.rect.colliderect(other.rect):
+                    if self.vel_y > 0:  # Falling onto other player
+                        self.rect.bottom = other.rect.top
+                        self.standing_on_player = True
+                        self.vel_y = 0
+                    elif self.vel_y < 0:  # Jumping into other player from below
+                        self.rect.top = other.rect.bottom
+                        self.vel_y = 0
+        
+        # Check if standing on another player (separate check for when already positioned)
         if other_players:
             for other in other_players:
                 if (self.rect.bottom == other.rect.top + 1 and 
@@ -238,15 +253,14 @@ class Player:
         if self.on_ground:
             self.is_jumping = False
             self.last_wall_id = None  # Reset wall tracking when touching ground
-            self.has_wall_jumped = False  # Reset wall jump flag when touching ground
-            
+        
     def respawn(self):
         self.rect.x = self.spawn_x
         self.rect.y = self.spawn_y
         self.vel_x = 0
         self.vel_y = 0
         self.last_wall_id = None
-        self.has_wall_jumped = False
+        self.can_wall_jump = False    # Reset can_wall_jump on respawn
         
     def draw(self, screen):
         pygame.draw.rect(screen, self.color, self.rect)
@@ -262,9 +276,14 @@ class Player:
         pygame.draw.circle(screen, BLACK, (self.rect.left + 12, self.rect.top + 15), pupil_size)
         pygame.draw.circle(screen, BLACK, (self.rect.right - 12, self.rect.top + 15), pupil_size)
         
-        # Draw mouth
+        # Draw mouth - happy face if all coins collected, normal face otherwise
         mouth_y = self.rect.top + 28
-        pygame.draw.arc(screen, BLACK, (self.rect.left + 10, mouth_y, 20, 10), 0, math.pi, 2)
+        if self.happy_face:
+            # Draw happy mouth (smile)
+            pygame.draw.arc(screen, BLACK, (self.rect.left + 10, mouth_y - 5, 20, 15), math.pi, 2*math.pi, 2)
+        else:
+            # Draw normal mouth (straight line)
+            pygame.draw.arc(screen, BLACK, (self.rect.left + 10, mouth_y, 20, 10), 0, math.pi, 2)
         
         # Visual indicator for wall sliding
         if self.touching_wall and not self.on_ground:
@@ -415,42 +434,37 @@ def create_level_2():
 
 def create_level_3():
     platforms = [
-        # Floor - with gaps!
-        Platform(0, SCREEN_HEIGHT - 40, 300, 40),
-        Platform(400, SCREEN_HEIGHT - 40, 300, 40),
-        Platform(800, SCREEN_HEIGHT - 40, 300, 40),
+        # Floor
+        Platform(0, SCREEN_HEIGHT - 40, SCREEN_WIDTH, 40),
         
-        # Platforms - complex arrangement
-        Platform(150, SCREEN_HEIGHT - 150, 100, 20),
-        Platform(350, SCREEN_HEIGHT - 200, 100, 20),
-        Platform(550, SCREEN_HEIGHT - 250, 100, 20),
-        Platform(750, SCREEN_HEIGHT - 300, 100, 20),
-        Platform(950, SCREEN_HEIGHT - 350, 100, 20),
-        Platform(750, SCREEN_HEIGHT - 450, 100, 20),
-        Platform(550, SCREEN_HEIGHT - 550, 100, 20),
-        Platform(350, SCREEN_HEIGHT - 650, 100, 20),
-        Platform(150, SCREEN_HEIGHT - 750, 800, 20),  # Top platform with goal
+        # Platforms - challenging spiral arrangement
+        Platform(100, SCREEN_HEIGHT - 150, 200, 20),
+        Platform(400, SCREEN_HEIGHT - 250, 200, 20),
+        Platform(100, SCREEN_HEIGHT - 350, 200, 20),
+        Platform(400, SCREEN_HEIGHT - 450, 200, 20),
+        Platform(100, SCREEN_HEIGHT - 550, 200, 20),
+        Platform(400, SCREEN_HEIGHT - 650, 200, 20),
+        Platform(100, SCREEN_HEIGHT - 750, 800, 20),  # Top platform with goal
+        
+        # Add connecting platforms to make level completable
+        Platform(300, SCREEN_HEIGHT - 200, 50, 20),  # Bridge
+        Platform(300, SCREEN_HEIGHT - 400, 50, 20),  # Bridge
+        Platform(300, SCREEN_HEIGHT - 600, 50, 20),  # Bridge
         
         # Walls
         Platform(0, 0, 20, SCREEN_HEIGHT - 40),
         Platform(SCREEN_WIDTH - 20, 0, 20, SCREEN_HEIGHT - 40),
-        
-        # Additional obstacles
-        Platform(300, SCREEN_HEIGHT - 350, 20, 150),  # Vertical obstacle
-        Platform(700, SCREEN_HEIGHT - 600, 20, 150),  # Vertical obstacle
     ]
     
     coins = [
-        Coin(200, SCREEN_HEIGHT - 200),
-        Coin(400, SCREEN_HEIGHT - 250),
-        Coin(600, SCREEN_HEIGHT - 300),
-        Coin(800, SCREEN_HEIGHT - 350),
-        Coin(1000, SCREEN_HEIGHT - 400),
-        Coin(800, SCREEN_HEIGHT - 500),
-        Coin(600, SCREEN_HEIGHT - 600),
-        Coin(400, SCREEN_HEIGHT - 700),
-        Coin(200, SCREEN_HEIGHT - 800),
-        Coin(600, SCREEN_HEIGHT - 800),
+        Coin(150, SCREEN_HEIGHT - 200),
+        Coin(450, SCREEN_HEIGHT - 300),
+        Coin(150, SCREEN_HEIGHT - 400),
+        Coin(450, SCREEN_HEIGHT - 500),
+        Coin(150, SCREEN_HEIGHT - 600),
+        Coin(450, SCREEN_HEIGHT - 700),
+        Coin(250, SCREEN_HEIGHT - 800),
+        Coin(550, SCREEN_HEIGHT - 800),
     ]
     
     total_coins = len(coins)
@@ -463,7 +477,7 @@ def update_goal_position(level):
     elif level == 2:
         return Goal(700, SCREEN_HEIGHT - 730)  # Positioned directly on the top platform
     elif level == 3:
-        return Goal(SCREEN_WIDTH - 100, SCREEN_HEIGHT - 830)  # At the top platform for level 3
+        return Goal(700, SCREEN_HEIGHT - 830)  # At the top platform for level 3
 
 def main():
     # Create game objects
@@ -564,6 +578,14 @@ def main():
                 player2.rect.colliderect(goal.rect) and 
                 len(coins) == 0):
                 game_complete = True
+            
+            # Update player faces based on coin collection
+            if len(coins) == 0:
+                player1.happy_face = True
+                player2.happy_face = True
+            else:
+                player1.happy_face = False
+                player2.happy_face = False
         
         # Draw everything
         screen.fill((135, 206, 235))  # Sky blue
