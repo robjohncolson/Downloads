@@ -289,9 +289,9 @@ class Player:
         self.death_phase = 0  # Start with surprised face
         self.surprised_face = True
         
-        # Set center target (middle of screen)
-        self.death_center_x = SCREEN_WIDTH // 2
-        self.death_center_y = SCREEN_HEIGHT // 2
+        # Set target position (straight up from current position)
+        self.death_center_x = self.rect.centerx  # Keep same X position
+        self.death_center_y = SCREEN_HEIGHT // 3  # Go up to 1/3 of screen height
         
         # Play explosion sound at higher volume
         explosion_sound.set_volume(1.0)  # Ensure maximum volume
@@ -301,26 +301,27 @@ class Player:
         # Update death animation phases
         if self.death_phase == 0:  # Surprised face phase
             if self.death_timer <= 75:  # After 15 frames (0.25 seconds)
-                self.death_phase = 1  # Move to center phase
+                self.death_phase = 1  # Move upward phase
         
-        elif self.death_phase == 1:  # Move to center phase
-            # Calculate vector to center
-            dx = self.death_center_x - self.rect.centerx
+        elif self.death_phase == 1:  # Move upward phase
+            # Calculate distance to target height
             dy = self.death_center_y - self.rect.centery
             
-            # Normalize and apply movement
-            distance = max(1, math.sqrt(dx*dx + dy*dy))
-            move_speed = distance * 0.2  # Move 20% of remaining distance each frame
+            # Apply upward movement (faster at first, then slowing)
+            move_speed = abs(dy) * 0.15  # Move 15% of remaining distance each frame
+            if move_speed < 3 and dy < 0:  # Minimum speed when moving up
+                move_speed = 3
             
-            self.rect.x += int(dx * move_speed / distance)
-            self.rect.y += int(dy * move_speed / distance)
+            # Only move if we haven't reached the target
+            if abs(dy) > 5:
+                self.rect.y += int(dy * move_speed / abs(dy))
             
-            # When close to center or timer below threshold, start explosion
-            if (distance < 20 or self.death_timer <= 45):
+            # When close to target height or timer below threshold, start explosion
+            if (abs(dy) < 20 or self.death_timer <= 45):
                 self.death_phase = 2  # Explode phase
                 
                 # Create explosion particles
-                for _ in range(50):  # More particles (was 30)
+                for _ in range(50):  # More particles
                     particle = ExplosionParticle(self.rect.centerx, self.rect.centery)
                     # Bigger explosion
                     particle.size = random.randint(5, 12)  # Larger particles
