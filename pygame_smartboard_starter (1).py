@@ -108,6 +108,10 @@ class Player:
         self.death_timer = 0
         self.death_particles = []
         self.death_sound_played = False
+        self.death_phase = 0  # 0: surprised, 1: move to center, 2: explode
+        self.death_center_x = 0  # Target x position for center movement
+        self.death_center_y = 0  # Target y position for center movement
+        self.surprised_face = False  # For the "OH!" expression
         
     def update(self, platforms, coins, keys_pressed, other_players=None):
         # If player is in dying animation, update particles and return
@@ -279,30 +283,57 @@ class Player:
         
     def start_death_animation(self):
         self.is_dying = True
-        self.death_timer = 60  # Animation lasts 60 frames (1 second)
+        self.death_timer = 90  # Longer animation (1.5 seconds)
         self.death_particles = []
         self.death_sound_played = False
+        self.death_phase = 0  # Start with surprised face
+        self.surprised_face = True
         
-        # Create explosion particles
-        for _ in range(30):  # Create 30 particles
-            particle = ExplosionParticle(self.rect.centerx, self.rect.centery)
-            self.death_particles.append(particle)
+        # Set center target (middle of screen)
+        self.death_center_x = SCREEN_WIDTH // 2
+        self.death_center_y = SCREEN_HEIGHT // 2
         
-        # Play explosion sound
+        # Play explosion sound at higher volume
+        explosion_sound.set_volume(1.0)  # Ensure maximum volume
         explosion_sound.play()
     
     def update_death_animation(self):
-        # Update all particles
-        for particle in self.death_particles[:]:
-            particle.update()
-            if particle.life <= 0:
-                self.death_particles.remove(particle)
+        # Update death animation phases
+        if self.death_phase == 0:  # Surprised face phase
+            if self.death_timer <= 75:  # After 15 frames (0.25 seconds)
+                self.death_phase = 1  # Move to center phase
         
-        # Play death sound once at the start of animation
-        if not self.death_sound_played:
-            # This is where you'll play your explosion sound
-            # explosion_sound.play()
-            self.death_sound_played = True
+        elif self.death_phase == 1:  # Move to center phase
+            # Calculate vector to center
+            dx = self.death_center_x - self.rect.centerx
+            dy = self.death_center_y - self.rect.centery
+            
+            # Normalize and apply movement
+            distance = max(1, math.sqrt(dx*dx + dy*dy))
+            move_speed = distance * 0.2  # Move 20% of remaining distance each frame
+            
+            self.rect.x += int(dx * move_speed / distance)
+            self.rect.y += int(dy * move_speed / distance)
+            
+            # When close to center or timer below threshold, start explosion
+            if (distance < 20 or self.death_timer <= 45):
+                self.death_phase = 2  # Explode phase
+                
+                # Create explosion particles
+                for _ in range(50):  # More particles (was 30)
+                    particle = ExplosionParticle(self.rect.centerx, self.rect.centery)
+                    # Bigger explosion
+                    particle.size = random.randint(5, 12)  # Larger particles
+                    particle.vel_x = random.uniform(-8, 8)  # Faster particles
+                    particle.vel_y = random.uniform(-10, -2)
+                    self.death_particles.append(particle)
+        
+        elif self.death_phase == 2:  # Explosion phase
+            # Update all particles
+            for particle in self.death_particles[:]:
+                particle.update()
+                if particle.life <= 0:
+                    self.death_particles.remove(particle)
         
         # Decrement timer
         self.death_timer -= 1
@@ -310,6 +341,7 @@ class Player:
         # When animation is complete, respawn
         if self.death_timer <= 0:
             self.is_dying = False
+            self.surprised_face = False
             self.respawn()
     
     def respawn(self):
@@ -322,7 +354,25 @@ class Player:
         
     def draw(self, screen):
         if self.is_dying:
-            # Draw explosion particles instead of player
+            if self.death_phase < 2:  # Still showing player with surprised face
+                # Draw player body
+                pygame.draw.rect(screen, self.color, self.rect)
+                pygame.draw.rect(screen, BLACK, self.rect, 2)
+                
+                # Draw surprised eyes (bigger)
+                eye_size = 10
+                pygame.draw.circle(screen, WHITE, (self.rect.left + 12, self.rect.top + 15), eye_size)
+                pygame.draw.circle(screen, WHITE, (self.rect.right - 12, self.rect.top + 15), eye_size)
+                
+                # Draw surprised pupils (smaller)
+                pupil_size = 3
+                pygame.draw.circle(screen, BLACK, (self.rect.left + 12, self.rect.top + 15), pupil_size)
+                pygame.draw.circle(screen, BLACK, (self.rect.right - 12, self.rect.top + 15), pupil_size)
+                
+                # Draw surprised "OH!" mouth (circle)
+                pygame.draw.circle(screen, BLACK, (self.rect.centerx, self.rect.top + 28), 8, 2)
+                
+            # Draw explosion particles
             for particle in self.death_particles:
                 particle.draw(screen)
         else:
