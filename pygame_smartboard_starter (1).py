@@ -60,10 +60,10 @@ try:
     explosion_sound = pygame.mixer.Sound("explosion.mp3")  # Add this line
     
     # Set volume
-    coin_sound.set_volume(0.5)
-    level_complete_sound.set_volume(0.7)
-    jump_sound.set_volume(0.4)
-    explosion_sound.set_volume(0.7)
+    coin_sound.set_volume(0.3)
+    level_complete_sound.set_volume(0.5)
+    jump_sound.set_volume(0.2)
+    explosion_sound.set_volume(1.0)
     
     print("Successfully loaded MP3 sound files")
 except Exception as e:
