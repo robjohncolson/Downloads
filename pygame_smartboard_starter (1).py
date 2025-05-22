@@ -34,6 +34,7 @@ YELLOW = (255, 255, 0)
 PURPLE = (200, 0, 255)
 GRAY = (128, 128, 128)
 BROWN = (139, 69, 19)
+EXPLOSION_COLORS = [(255, 0, 0), (255, 128, 0), (255, 255, 0), (255, 255, 255)]  # Red, Orange, Yellow, White
 
 # Clock for controlling frame rate
 clock = pygame.time.Clock()
@@ -56,11 +57,13 @@ try:
     coin_sound = pygame.mixer.Sound("coin.mp3")  # Use your MP3 file
     level_complete_sound = pygame.mixer.Sound("level_complete.mp3")  # Use your MP3 file
     jump_sound = pygame.mixer.Sound("jump.mp3")  # Use your MP3 file
+    explosion_sound = pygame.mixer.Sound("explosion.mp3")  # Add this line
     
     # Set volume
     coin_sound.set_volume(0.5)
     level_complete_sound.set_volume(0.7)
     jump_sound.set_volume(0.4)
+    explosion_sound.set_volume(0.7)
     
     print("Successfully loaded MP3 sound files")
 except Exception as e:
@@ -74,6 +77,7 @@ except Exception as e:
     coin_sound = DummySound()
     level_complete_sound = DummySound()
     jump_sound = DummySound()
+    explosion_sound = DummySound()  # Add this line
 
 # Add these constants for the night sky
 NIGHT_SKY = (25, 25, 50)  # Dark blue for night sky
@@ -100,8 +104,17 @@ class Player:
         self.bounce_timer = 0  # Timer to enforce bounce direction
         self.ignore_wall_contact = False  # Flag to ignore wall contact during bounce
         self.happy_face = False  # New attribute to track if player should show happy face
+        self.is_dying = False
+        self.death_timer = 0
+        self.death_particles = []
+        self.death_sound_played = False
         
     def update(self, platforms, coins, keys_pressed, other_players=None):
+        # If player is in dying animation, update particles and return
+        if self.is_dying:
+            self.update_death_animation()
+            return
+            
         # Handle bounce timer
         if self.bounce_timer > 0:
             self.bounce_timer -= 1
@@ -261,8 +274,44 @@ class Player:
         
         # Check if player has fallen off the screen
         if self.rect.top > SCREEN_HEIGHT:
-            self.respawn()
+            self.start_death_animation()
+            return
         
+    def start_death_animation(self):
+        self.is_dying = True
+        self.death_timer = 60  # Animation lasts 60 frames (1 second)
+        self.death_particles = []
+        self.death_sound_played = False
+        
+        # Create explosion particles
+        for _ in range(30):  # Create 30 particles
+            particle = ExplosionParticle(self.rect.centerx, self.rect.centery)
+            self.death_particles.append(particle)
+        
+        # Play explosion sound
+        explosion_sound.play()
+    
+    def update_death_animation(self):
+        # Update all particles
+        for particle in self.death_particles[:]:
+            particle.update()
+            if particle.life <= 0:
+                self.death_particles.remove(particle)
+        
+        # Play death sound once at the start of animation
+        if not self.death_sound_played:
+            # This is where you'll play your explosion sound
+            # explosion_sound.play()
+            self.death_sound_played = True
+        
+        # Decrement timer
+        self.death_timer -= 1
+        
+        # When animation is complete, respawn
+        if self.death_timer <= 0:
+            self.is_dying = False
+            self.respawn()
+    
     def respawn(self):
         self.rect.x = self.spawn_x
         self.rect.y = self.spawn_y
@@ -272,35 +321,40 @@ class Player:
         self.can_wall_jump = False    # Reset can_wall_jump on respawn
         
     def draw(self, screen):
-        pygame.draw.rect(screen, self.color, self.rect)
-        pygame.draw.rect(screen, BLACK, self.rect, 2)
-        
-        # Draw eyes
-        eye_size = 8
-        pygame.draw.circle(screen, WHITE, (self.rect.left + 12, self.rect.top + 15), eye_size)
-        pygame.draw.circle(screen, WHITE, (self.rect.right - 12, self.rect.top + 15), eye_size)
-        
-        # Draw pupils
-        pupil_size = 4
-        pygame.draw.circle(screen, BLACK, (self.rect.left + 12, self.rect.top + 15), pupil_size)
-        pygame.draw.circle(screen, BLACK, (self.rect.right - 12, self.rect.top + 15), pupil_size)
-        
-        # Draw mouth - happy face if all coins collected, normal face otherwise
-        mouth_y = self.rect.top + 28
-        if self.happy_face:
-            # Draw happy mouth (smile)
-            pygame.draw.arc(screen, BLACK, (self.rect.left + 10, mouth_y - 5, 20, 15), math.pi, 2*math.pi, 2)
+        if self.is_dying:
+            # Draw explosion particles instead of player
+            for particle in self.death_particles:
+                particle.draw(screen)
         else:
-            # Draw normal mouth (straight line)
-            pygame.draw.arc(screen, BLACK, (self.rect.left + 10, mouth_y, 20, 10), 0, math.pi, 2)
-        
-        # Visual indicator for wall sliding
-        if self.touching_wall and not self.on_ground:
-            # Show a visual indicator on the side where the wall is
-            if self.wall_jump_direction == -1:  # Wall is on the right
-                pygame.draw.rect(screen, WHITE, (self.rect.right - 3, self.rect.y + 5, 3, self.rect.height - 10))
-            elif self.wall_jump_direction == 1:  # Wall is on the left
-                pygame.draw.rect(screen, WHITE, (self.rect.left, self.rect.y + 5, 3, self.rect.height - 10))
+            pygame.draw.rect(screen, self.color, self.rect)
+            pygame.draw.rect(screen, BLACK, self.rect, 2)
+            
+            # Draw eyes
+            eye_size = 8
+            pygame.draw.circle(screen, WHITE, (self.rect.left + 12, self.rect.top + 15), eye_size)
+            pygame.draw.circle(screen, WHITE, (self.rect.right - 12, self.rect.top + 15), eye_size)
+            
+            # Draw pupils
+            pupil_size = 4
+            pygame.draw.circle(screen, BLACK, (self.rect.left + 12, self.rect.top + 15), pupil_size)
+            pygame.draw.circle(screen, BLACK, (self.rect.right - 12, self.rect.top + 15), pupil_size)
+            
+            # Draw mouth - happy face if all coins collected, normal face otherwise
+            mouth_y = self.rect.top + 28
+            if self.happy_face:
+                # Draw happy mouth (smile)
+                pygame.draw.arc(screen, BLACK, (self.rect.left + 10, mouth_y - 5, 20, 15), math.pi, 2*math.pi, 2)
+            else:
+                # Draw normal mouth (straight line)
+                pygame.draw.arc(screen, BLACK, (self.rect.left + 10, mouth_y, 20, 10), 0, math.pi, 2)
+            
+            # Visual indicator for wall sliding
+            if self.touching_wall and not self.on_ground:
+                # Show a visual indicator on the side where the wall is
+                if self.wall_jump_direction == -1:  # Wall is on the right
+                    pygame.draw.rect(screen, WHITE, (self.rect.right - 3, self.rect.y + 5, 3, self.rect.height - 10))
+                elif self.wall_jump_direction == 1:  # Wall is on the left
+                    pygame.draw.rect(screen, WHITE, (self.rect.left, self.rect.y + 5, 3, self.rect.height - 10))
 
 class Platform:
     def __init__(self, x, y, width, height, color=BROWN):
@@ -392,6 +446,29 @@ class Spike:
                 (spike_x, self.rect.y),                            # Top middle
                 (spike_x + 5, self.rect.y + self.rect.height - 5)   # Bottom right
             ])
+
+class ExplosionParticle:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.size = random.randint(3, 8)
+        self.color = random.choice(EXPLOSION_COLORS)
+        self.vel_x = random.uniform(-5, 5)
+        self.vel_y = random.uniform(-8, -2)
+        self.gravity = 0.2
+        self.life = random.randint(20, 40)  # Frames the particle will live
+    
+    def update(self):
+        self.vel_y += self.gravity
+        self.x += self.vel_x
+        self.y += self.vel_y
+        self.life -= 1
+        # Fade out by reducing size
+        if self.life < 10:
+            self.size = max(1, self.size - 0.2)
+    
+    def draw(self, screen):
+        pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), int(self.size))
 
 class LevelManager:
     def __init__(self):
@@ -830,26 +907,21 @@ def main():
             player1.update(platforms, coins, keys_pressed, [player2])
             player2.update(platforms, coins, keys_pressed, [player1])
             
-            # Check for spike collisions or falling off screen
-            spike_collision = False
-            for spike in spikes:
-                if player1.rect.colliderect(spike.rect) or player2.rect.colliderect(spike.rect):
-                    spike_collision = True
-                    break
-            
-            # Also check if players have fallen off screen (backup check)
-            fallen_off_screen = player1.rect.top > SCREEN_HEIGHT or player2.rect.top > SCREEN_HEIGHT
-            
-            if spike_collision or fallen_off_screen:
-                # Reset players but stay on current level
-                player1.respawn()
-                player2.respawn()
-                player1.collected_coins = 0
-                player2.collected_coins = 0
+            # Check for spike collisions
+            if not player1.is_dying and not player2.is_dying:  # Only check if not already dying
+                spike_collision = False
+                for spike in spikes:
+                    if player1.rect.colliderect(spike.rect):
+                        player1.start_death_animation()
+                        spike_collision = True
+                    if player2.rect.colliderect(spike.rect):
+                        player2.start_death_animation()
+                        spike_collision = True
                 
-                # Show message
-                show_spike_message = True
-                spike_message_timer = 60  # Show for 60 frames (1 second at 60 FPS)
+                # Show message if spike collision occurred
+                if spike_collision:
+                    show_spike_message = True
+                    spike_message_timer = 60
             
             for coin in coins:
                 coin.update()
