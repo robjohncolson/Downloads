@@ -318,23 +318,47 @@ class Player:
             
             # When close to target height or timer below threshold, start explosion
             if (abs(dy) < 20 or self.death_timer <= 45):
-                self.death_phase = 2  # Explode phase
-                
-                # Create explosion particles
-                for _ in range(50):  # More particles
-                    particle = ExplosionParticle(self.rect.centerx, self.rect.centery)
-                    # Bigger explosion
-                    particle.size = random.randint(5, 12)  # Larger particles
-                    particle.vel_x = random.uniform(-8, 8)  # Faster particles
-                    particle.vel_y = random.uniform(-10, -2)
-                    self.death_particles.append(particle)
+                self.death_phase = 2  # Growth and explosion phase
         
-        elif self.death_phase == 2:  # Explosion phase
-            # Update all particles
-            for particle in self.death_particles[:]:
-                particle.update()
-                if particle.life <= 0:
-                    self.death_particles.remove(particle)
+        elif self.death_phase == 2:  # Growth and explosion phase
+            # Calculate growth factor (from 1x to 20x over 30 frames)
+            remaining_growth_time = max(0, self.death_timer - 15)  # Last 15 frames reserved for explosion
+            if remaining_growth_time > 0:
+                # Grow from 1x to 20x size
+                growth_progress = (30 - remaining_growth_time) / 30
+                growth_factor = 1 + 19 * growth_progress  # 1 to 20
+                
+                # Store original center for consistent positioning
+                center_x = self.rect.centerx
+                center_y = self.rect.centery
+                
+                # Update rectangle size while keeping center position
+                new_width = int(40 * growth_factor)
+                new_height = int(40 * growth_factor)
+                self.rect.width = new_width
+                self.rect.height = new_height
+                self.rect.centerx = center_x
+                self.rect.centery = center_y
+                
+                # If we've reached maximum size, create explosion
+                if growth_factor >= 19.5 and not self.death_particles:
+                    # Create explosion particles
+                    for _ in range(100):  # Even more particles for bigger explosion
+                        particle = ExplosionParticle(self.rect.centerx, self.rect.centery)
+                        # Bigger explosion
+                        particle.size = random.randint(5, 15)  # Larger particles
+                        particle.vel_x = random.uniform(-12, 12)  # Faster particles
+                        particle.vel_y = random.uniform(-15, -2)
+                        self.death_particles.append(particle)
+                    
+                    # Play explosion sound again for the final explosion
+                    explosion_sound.play()
+        
+        # Update all particles
+        for particle in self.death_particles[:]:
+            particle.update()
+            if particle.life <= 0:
+                self.death_particles.remove(particle)
         
         # Decrement timer
         self.death_timer -= 1
@@ -343,6 +367,9 @@ class Player:
         if self.death_timer <= 0:
             self.is_dying = False
             self.surprised_face = False
+            # Reset size before respawning
+            self.rect.width = 40
+            self.rect.height = 40
             self.respawn()
     
     def respawn(self):
@@ -355,24 +382,37 @@ class Player:
         
     def draw(self, screen):
         if self.is_dying:
-            if self.death_phase < 2:  # Still showing player with surprised face
+            if self.death_phase < 3 and self.death_timer > 15:  # Still showing player with surprised face
                 # Draw player body
                 pygame.draw.rect(screen, self.color, self.rect)
                 pygame.draw.rect(screen, BLACK, self.rect, 2)
                 
+                # Scale eye and mouth sizes based on player size
+                scale_factor = self.rect.width / 40
+                
                 # Draw surprised eyes (bigger)
-                eye_size = 10
-                pygame.draw.circle(screen, WHITE, (self.rect.left + 12, self.rect.top + 15), eye_size)
-                pygame.draw.circle(screen, WHITE, (self.rect.right - 12, self.rect.top + 15), eye_size)
+                eye_size = int(10 * scale_factor)
+                left_eye_x = self.rect.left + int(12 * scale_factor)
+                right_eye_x = self.rect.right - int(12 * scale_factor)
+                eye_y = self.rect.top + int(15 * scale_factor)
+                
+                pygame.draw.circle(screen, WHITE, (left_eye_x, eye_y), eye_size)
+                pygame.draw.circle(screen, WHITE, (right_eye_x, eye_y), eye_size)
                 
                 # Draw surprised pupils (smaller)
-                pupil_size = 3
-                pygame.draw.circle(screen, BLACK, (self.rect.left + 12, self.rect.top + 15), pupil_size)
-                pygame.draw.circle(screen, BLACK, (self.rect.right - 12, self.rect.top + 15), pupil_size)
+                pupil_size = int(3 * scale_factor)
+                pygame.draw.circle(screen, BLACK, (left_eye_x, eye_y), pupil_size)
+                pygame.draw.circle(screen, BLACK, (right_eye_x, eye_y), pupil_size)
                 
-                # Draw surprised "OH!" mouth (circle)
-                pygame.draw.circle(screen, BLACK, (self.rect.centerx, self.rect.top + 28), 8, 2)
+                # Draw surprised "O" mouth (larger circle)
+                mouth_size = int(8 * scale_factor)
+                mouth_y = self.rect.top + int(28 * scale_factor)
                 
+                # Draw a filled black circle for the mouth
+                pygame.draw.circle(screen, BLACK, (self.rect.centerx, mouth_y), mouth_size)
+                # Draw a smaller white circle inside to create the "O" shape
+                pygame.draw.circle(screen, self.color, (self.rect.centerx, mouth_y), max(1, mouth_size - int(2 * scale_factor)))
+            
             # Draw explosion particles
             for particle in self.death_particles:
                 particle.draw(screen)
