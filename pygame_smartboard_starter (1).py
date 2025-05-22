@@ -316,23 +316,47 @@ class Player:
             if abs(dy) > 5:
                 self.rect.y += int(dy * move_speed / abs(dy))
             
-            # When close to target height, explode immediately
+            # When close to target height, start growth phase
             if abs(dy) < 20:
-                # Create explosion particles
-                for _ in range(150):  # Even more particles for bigger explosion
-                    particle = ExplosionParticle(self.rect.centerx, self.rect.centery)
-                    # Bigger explosion
-                    particle.size = random.randint(5, 15)  # Larger particles
-                    particle.vel_x = random.uniform(-15, 15)  # Faster particles
-                    particle.vel_y = random.uniform(-15, 15)  # Particles in all directions
-                    self.death_particles.append(particle)
+                self.death_phase = 2  # Growth phase
+        
+        elif self.death_phase == 2:  # Growth phase
+            # Calculate growth factor (from 1x to 20x over 30 frames)
+            remaining_growth_time = max(0, self.death_timer - 15)  # Last 15 frames reserved for explosion
+            if remaining_growth_time > 0:
+                # Grow from 1x to 20x size
+                growth_progress = (30 - remaining_growth_time) / 30
+                growth_factor = 1 + 19 * growth_progress  # 1 to 20
                 
-                # Play explosion sound again for the final explosion
-                explosion_sound.play()
+                # Store original center for consistent positioning
+                center_x = self.rect.centerx
+                center_y = self.rect.centery
                 
-                # Skip growth phase and go straight to explosion
-                self.death_phase = 3  # White flash and explosion phase
-                self.white_flash_timer = 10  # Flash for 10 frames
+                # Update rectangle size while keeping center position
+                new_width = int(40 * growth_factor)
+                new_height = int(40 * growth_factor)
+                self.rect.width = new_width
+                self.rect.height = new_height
+                self.rect.centerx = center_x
+                self.rect.centery = center_y
+                
+                # If we've reached maximum size, create explosion
+                if growth_factor >= 19.5:
+                    # Create explosion particles
+                    for _ in range(150):  # Even more particles for bigger explosion
+                        particle = ExplosionParticle(self.rect.centerx, self.rect.centery)
+                        # Bigger explosion
+                        particle.size = random.randint(5, 15)  # Larger particles
+                        particle.vel_x = random.uniform(-15, 15)  # Faster particles
+                        particle.vel_y = random.uniform(-15, 15)  # Particles in all directions
+                        self.death_particles.append(particle)
+                    
+                    # Play explosion sound again for the final explosion
+                    explosion_sound.play()
+                    
+                    # White flash effect
+                    self.death_phase = 3  # White flash and explosion phase
+                    self.white_flash_timer = 10  # Flash for 10 frames
         
         elif self.death_phase == 3:  # White flash and explosion phase
             # Decrement white flash timer
@@ -1003,12 +1027,16 @@ def main():
             if not player1.is_dying and not player2.is_dying:  # Only check if not already dying
                 spike_collision = False
                 for spike in spikes:
-                    if player1.rect.colliderect(spike.rect):
+                    if player1.rect.colliderect(spike.rect) and not player1.is_dying:
                         player1.start_death_animation()
                         spike_collision = True
-                    if player2.rect.colliderect(spike.rect):
+                        break  # Stop checking after first collision
+                
+                for spike in spikes:
+                    if player2.rect.colliderect(spike.rect) and not player2.is_dying:
                         player2.start_death_animation()
                         spike_collision = True
+                        break  # Stop checking after first collision
                 
                 # Show message if spike collision occurred
                 if spike_collision:
