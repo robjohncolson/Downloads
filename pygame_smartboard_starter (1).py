@@ -316,43 +316,28 @@ class Player:
             if abs(dy) > 5:
                 self.rect.y += int(dy * move_speed / abs(dy))
             
-            # When close to target height or timer below threshold, start explosion
-            if (abs(dy) < 20 or self.death_timer <= 45):
-                self.death_phase = 2  # Growth and explosion phase
+            # When close to target height, explode immediately
+            if abs(dy) < 20:
+                # Create explosion particles
+                for _ in range(150):  # Even more particles for bigger explosion
+                    particle = ExplosionParticle(self.rect.centerx, self.rect.centery)
+                    # Bigger explosion
+                    particle.size = random.randint(5, 15)  # Larger particles
+                    particle.vel_x = random.uniform(-15, 15)  # Faster particles
+                    particle.vel_y = random.uniform(-15, 15)  # Particles in all directions
+                    self.death_particles.append(particle)
+                
+                # Play explosion sound again for the final explosion
+                explosion_sound.play()
+                
+                # Skip growth phase and go straight to explosion
+                self.death_phase = 3  # White flash and explosion phase
+                self.white_flash_timer = 10  # Flash for 10 frames
         
-        elif self.death_phase == 2:  # Growth and explosion phase
-            # Calculate growth factor (from 1x to 20x over 30 frames)
-            remaining_growth_time = max(0, self.death_timer - 15)  # Last 15 frames reserved for explosion
-            if remaining_growth_time > 0:
-                # Grow from 1x to 20x size
-                growth_progress = (30 - remaining_growth_time) / 30
-                growth_factor = 1 + 19 * growth_progress  # 1 to 20
-                
-                # Store original center for consistent positioning
-                center_x = self.rect.centerx
-                center_y = self.rect.centery
-                
-                # Update rectangle size while keeping center position
-                new_width = int(40 * growth_factor)
-                new_height = int(40 * growth_factor)
-                self.rect.width = new_width
-                self.rect.height = new_height
-                self.rect.centerx = center_x
-                self.rect.centery = center_y
-                
-                # If we've reached maximum size, create explosion
-                if growth_factor >= 19.5 and not self.death_particles:
-                    # Create explosion particles
-                    for _ in range(100):  # Even more particles for bigger explosion
-                        particle = ExplosionParticle(self.rect.centerx, self.rect.centery)
-                        # Bigger explosion
-                        particle.size = random.randint(5, 15)  # Larger particles
-                        particle.vel_x = random.uniform(-12, 12)  # Faster particles
-                        particle.vel_y = random.uniform(-15, -2)
-                        self.death_particles.append(particle)
-                    
-                    # Play explosion sound again for the final explosion
-                    explosion_sound.play()
+        elif self.death_phase == 3:  # White flash and explosion phase
+            # Decrement white flash timer
+            if hasattr(self, 'white_flash_timer'):
+                self.white_flash_timer -= 1
         
         # Update all particles
         for particle in self.death_particles[:]:
@@ -381,6 +366,14 @@ class Player:
         self.can_wall_jump = False    # Reset can_wall_jump on respawn
         
     def draw(self, screen):
+        # If in white flash phase, draw a fading white overlay
+        if self.is_dying and self.death_phase == 3 and hasattr(self, 'white_flash_timer') and self.white_flash_timer > 0:
+            # Create a white surface with alpha for the flash
+            flash_alpha = min(200, self.white_flash_timer * 25)  # Max 200 alpha, fading out
+            flash_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            flash_surface.fill((255, 255, 255, flash_alpha))
+            screen.blit(flash_surface, (0, 0))
+        
         if self.is_dying:
             if self.death_phase < 3 and self.death_timer > 15:  # Still showing player with surprised face
                 # Draw player body
@@ -625,9 +618,17 @@ def create_level_1():
         Coin(950, SCREEN_HEIGHT - 600),
     ]
     
+    # Add spikes to level 1 - position them ABOVE the platforms
+    spikes = [
+        Spike(400, SCREEN_HEIGHT - 55, 100, 15),  # Spikes on the floor
+        Spike(700, SCREEN_HEIGHT - 55, 100, 15),  # More spikes on the floor
+        Spike(300, SCREEN_HEIGHT - 165, 50, 15),  # Spikes on a platform
+        Spike(600, SCREEN_HEIGHT - 265, 50, 15),  # Spikes on another platform
+    ]
+    
     total_coins = len(coins)  # Count the total coins
     
-    return platforms, coins, total_coins, []  # Empty spikes list
+    return platforms, coins, total_coins, spikes  # Now returning spikes
 
 def create_level_2():
     platforms = [
