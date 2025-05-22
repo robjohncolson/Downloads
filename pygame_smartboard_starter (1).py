@@ -1,4 +1,4 @@
- import pygame
+import pygame
 import sys
 import math
 import random
@@ -258,6 +258,10 @@ class Player:
         if self.on_ground:
             self.is_jumping = False
             self.last_wall_id = None  # Reset wall tracking when touching ground
+        
+        # Check if player has fallen off the screen
+        if self.rect.top > SCREEN_HEIGHT:
+            self.respawn()
         
     def respawn(self):
         self.rect.x = self.spawn_x
@@ -826,27 +830,24 @@ def main():
             player1.update(platforms, coins, keys_pressed, [player2])
             player2.update(platforms, coins, keys_pressed, [player1])
             
-            # Check for spike collisions
+            # Check for spike collisions or falling off screen
             spike_collision = False
             for spike in spikes:
                 if player1.rect.colliderect(spike.rect) or player2.rect.colliderect(spike.rect):
                     spike_collision = True
                     break
             
-            if spike_collision:
-                # Save current world
-                current_world = level_manager.current_world
-                
-                # Reset to level 1 of current world
-                level_manager.current_level = 1
+            # Also check if players have fallen off screen (backup check)
+            fallen_off_screen = player1.rect.top > SCREEN_HEIGHT or player2.rect.top > SCREEN_HEIGHT
+            
+            if spike_collision or fallen_off_screen:
+                # Reset players but stay on current level
                 player1.respawn()
                 player2.respawn()
                 player1.collected_coins = 0
                 player2.collected_coins = 0
-                platforms, coins, total_coins, spikes = level_manager.get_level()
-                goal = update_goal_position(level_manager.current_world, level_manager.current_level)
                 
-                # Show spike message
+                # Show message
                 show_spike_message = True
                 spike_message_timer = 60  # Show for 60 frames (1 second at 60 FPS)
             
