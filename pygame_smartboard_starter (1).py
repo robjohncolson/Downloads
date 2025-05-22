@@ -580,19 +580,19 @@ class ExplosionParticle:
 
 class LevelManager:
     def __init__(self):
-        self.current_level = 1
         self.current_world = 1
+        self.current_level = 1
+        self.max_worlds = 3  # Increase to 3 worlds
         self.max_levels = 3
-        self.max_worlds = 2
-        
+    
     def get_level(self):
         if self.current_world == 1:
             if self.current_level == 1:
-                return create_level_1()
+                return create_world1_level_1()
             elif self.current_level == 2:
-                return create_level_2()
+                return create_world1_level_2()
             elif self.current_level == 3:
-                return create_level_3()
+                return create_world1_level_3()
         elif self.current_world == 2:
             if self.current_level == 1:
                 return create_world2_level_1()
@@ -600,22 +600,34 @@ class LevelManager:
                 return create_world2_level_2()
             elif self.current_level == 3:
                 return create_world2_level_3()
+        elif self.current_world == 3:  # Add World 3
+            if self.current_level == 1:
+                return create_world3_level_1()
+            elif self.current_level == 2:
+                return create_world3_level_2()
+            elif self.current_level == 3:
+                return create_world3_level_3()
         
+        # Default fallback
+        return create_world1_level_1()
+    
     def next_level(self):
-        if self.current_level < self.max_levels:
-            self.current_level += 1
-            return True
-        elif self.current_world < self.max_worlds:
-            self.current_world += 1
+        self.current_level += 1
+        if self.current_level > self.max_levels:
             self.current_level = 1
-            return True
-        return False
+            self.current_world += 1
+            if self.current_world > self.max_worlds:
+                # All levels complete
+                self.current_world = self.max_worlds
+                self.current_level = self.max_levels
+                return False
+        return True
     
     def reset(self):
-        self.current_level = 1
         self.current_world = 1
+        self.current_level = 1
 
-def create_level_1():
+def create_world1_level_1():
     platforms = [
         # Floor
         Platform(0, SCREEN_HEIGHT - 40, SCREEN_WIDTH, 40),
@@ -654,7 +666,7 @@ def create_level_1():
     
     return platforms, coins, total_coins, spikes  # Now returning spikes
 
-def create_level_2():
+def create_world1_level_2():
     platforms = [
         # Floor
         Platform(0, SCREEN_HEIGHT - 40, SCREEN_WIDTH, 40),
@@ -694,7 +706,7 @@ def create_level_2():
     
     return platforms, coins, total_coins, []  # Empty spikes list
 
-def create_level_3():
+def create_world1_level_3():
     platforms = [
         # Floor
         Platform(0, SCREEN_HEIGHT - 40, SCREEN_WIDTH, 40),
@@ -775,23 +787,33 @@ def create_world2_level_1():
 
 def create_world2_level_2():
     platforms = [
-        # Floor with larger gaps
+        # Floor with gaps
         Platform(0, SCREEN_HEIGHT - 40, 200, 40),
         Platform(400, SCREEN_HEIGHT - 40, 200, 40),
         Platform(800, SCREEN_HEIGHT - 40, 200, 40),
         
-        # Vertical challenge
-        Platform(200, SCREEN_HEIGHT - 150, 100, 20),
-        Platform(400, SCREEN_HEIGHT - 250, 100, 20),
-        Platform(600, SCREEN_HEIGHT - 350, 100, 20),
-        Platform(800, SCREEN_HEIGHT - 450, 100, 20),
+        # Lower section - more accessible platforms
+        Platform(150, SCREEN_HEIGHT - 150, 150, 20),  # Wider platform
+        Platform(350, SCREEN_HEIGHT - 200, 150, 20),  # Wider platform
+        Platform(550, SCREEN_HEIGHT - 250, 150, 20),  # Wider platform
+        Platform(750, SCREEN_HEIGHT - 300, 150, 20),  # Wider platform
         
-        # Wall jump challenge
-        Platform(300, SCREEN_HEIGHT - 350, 20, 200),  # Vertical wall
-        Platform(700, SCREEN_HEIGHT - 550, 20, 200),  # Vertical wall
+        # Middle section - wall jump challenge with more forgiving spacing
+        Platform(200, SCREEN_HEIGHT - 350, 20, 150),  # Taller vertical wall
+        Platform(400, SCREEN_HEIGHT - 400, 20, 150),  # Taller vertical wall
+        Platform(600, SCREEN_HEIGHT - 450, 20, 150),  # Taller vertical wall
+        Platform(800, SCREEN_HEIGHT - 500, 20, 150),  # Taller vertical wall
         
-        # Upper platform with goal
-        Platform(300, SCREEN_HEIGHT - 550, 500, 20),
+        # Additional platforms to help with wall jumps
+        Platform(250, SCREEN_HEIGHT - 350, 100, 20),  # Helper platform
+        Platform(450, SCREEN_HEIGHT - 400, 100, 20),  # Helper platform
+        Platform(650, SCREEN_HEIGHT - 450, 100, 20),  # Helper platform
+        
+        # Upper platforms
+        Platform(100, SCREEN_HEIGHT - 450, 150, 20),
+        Platform(300, SCREEN_HEIGHT - 500, 150, 20),
+        Platform(500, SCREEN_HEIGHT - 550, 150, 20),
+        Platform(700, SCREEN_HEIGHT - 600, 300, 20),  # Final platform with goal
         
         # Walls
         Platform(0, 0, 20, SCREEN_HEIGHT - 40),
@@ -799,20 +821,36 @@ def create_world2_level_2():
     ]
     
     coins = [
-        Coin(250, SCREEN_HEIGHT - 200),
-        Coin(450, SCREEN_HEIGHT - 300),
-        Coin(650, SCREEN_HEIGHT - 400),
-        Coin(850, SCREEN_HEIGHT - 500),
-        Coin(350, SCREEN_HEIGHT - 600),
+        # Lower section coins
+        Coin(175, SCREEN_HEIGHT - 200),
+        Coin(375, SCREEN_HEIGHT - 250),
+        Coin(575, SCREEN_HEIGHT - 300),
+        Coin(775, SCREEN_HEIGHT - 350),
+        
+        # Middle section coins - more accessible
+        Coin(300, SCREEN_HEIGHT - 400),
+        Coin(500, SCREEN_HEIGHT - 450),
+        Coin(700, SCREEN_HEIGHT - 500),
+        
+        # Upper section coins
+        Coin(150, SCREEN_HEIGHT - 500),
+        Coin(350, SCREEN_HEIGHT - 550),
         Coin(550, SCREEN_HEIGHT - 600),
-        Coin(750, SCREEN_HEIGHT - 600),
+        Coin(800, SCREEN_HEIGHT - 650),  # Coin on the final platform
     ]
     
-    # Add spikes on some platforms
+    # Fewer spikes to make it more beatable
     spikes = [
-        Spike(450, SCREEN_HEIGHT - 250 - 15),  # On second platform
-        Spike(650, SCREEN_HEIGHT - 350 - 15),  # On third platform
-        Spike(400, SCREEN_HEIGHT - 550 - 15, 100),  # On upper platform
+        # Spikes on the floor between gaps - narrower to allow more room for error
+        Spike(250, SCREEN_HEIGHT - 40, 100),  # Between first and second floor platforms
+        Spike(650, SCREEN_HEIGHT - 40, 100),  # Between second and third floor platforms
+        
+        # Only a few strategic spikes on platforms
+        Spike(200, SCREEN_HEIGHT - 150 - 15, 30),  # On first platform, smaller
+        Spike(600, SCREEN_HEIGHT - 250 - 15, 30),  # On third platform, smaller
+        
+        # Just one spike on upper platforms
+        Spike(350, SCREEN_HEIGHT - 500 - 15, 30),  # On second upper platform, smaller
     ]
     
     total_coins = len(coins)
@@ -873,23 +911,206 @@ def create_world2_level_3():
     
     return platforms, coins, total_coins, spikes
 
+def create_world3_level_1():
+    platforms = [
+        # Floor
+        Platform(0, SCREEN_HEIGHT - 40, SCREEN_WIDTH, 40),
+        
+        # Floating platforms
+        Platform(200, SCREEN_HEIGHT - 150, 200, 20),
+        Platform(500, SCREEN_HEIGHT - 250, 200, 20),
+        Platform(800, SCREEN_HEIGHT - 350, 200, 20),
+        
+        # Upper platforms
+        Platform(300, SCREEN_HEIGHT - 450, 200, 20),
+        Platform(600, SCREEN_HEIGHT - 550, 400, 20),
+    ]
+    
+    coins = [
+        Coin(300, SCREEN_HEIGHT - 200),
+        Coin(600, SCREEN_HEIGHT - 300),
+        Coin(900, SCREEN_HEIGHT - 400),
+        Coin(400, SCREEN_HEIGHT - 500),
+        Coin(700, SCREEN_HEIGHT - 600),
+        Coin(900, SCREEN_HEIGHT - 600),
+    ]
+    
+    spikes = [
+        Spike(400, SCREEN_HEIGHT - 150 - 15, 50),
+        Spike(700, SCREEN_HEIGHT - 250 - 15, 50),
+    ]
+    
+    total_coins = len(coins)
+    
+    return platforms, coins, total_coins, spikes
+
+def create_world3_level_2():
+    platforms = [
+        # Floor with gaps
+        Platform(0, SCREEN_HEIGHT - 40, 300, 40),
+        Platform(500, SCREEN_HEIGHT - 40, 300, 40),
+        Platform(900, SCREEN_HEIGHT - 40, 300, 40),
+        
+        # Middle platforms
+        Platform(200, SCREEN_HEIGHT - 200, 150, 20),
+        Platform(450, SCREEN_HEIGHT - 300, 150, 20),
+        Platform(700, SCREEN_HEIGHT - 400, 150, 20),
+        
+        # Upper platforms
+        Platform(300, SCREEN_HEIGHT - 500, 200, 20),
+        Platform(600, SCREEN_HEIGHT - 600, 400, 20),
+        
+        # Walls
+        Platform(0, 0, 20, SCREEN_HEIGHT - 40),
+        Platform(SCREEN_WIDTH - 20, 0, 20, SCREEN_HEIGHT - 40),
+    ]
+    
+    coins = [
+        Coin(250, SCREEN_HEIGHT - 250),
+        Coin(500, SCREEN_HEIGHT - 350),
+        Coin(750, SCREEN_HEIGHT - 450),
+        Coin(400, SCREEN_HEIGHT - 550),
+        Coin(700, SCREEN_HEIGHT - 650),
+        Coin(900, SCREEN_HEIGHT - 650),
+    ]
+    
+    spikes = [
+        Spike(300, SCREEN_HEIGHT - 40, 200),
+        Spike(800, SCREEN_HEIGHT - 40, 100),
+        Spike(350, SCREEN_HEIGHT - 200 - 15, 50),
+        Spike(600, SCREEN_HEIGHT - 300 - 15, 50),
+    ]
+    
+    total_coins = len(coins)
+    
+    return platforms, coins, total_coins, spikes
+
+def create_world3_level_3():
+    # Create a maze-like final challenge level
+    platforms = [
+        # Starting area - small isolated platform
+        Platform(50, SCREEN_HEIGHT - 40, 100, 40),
+        
+        # First challenge - floating islands with large gaps
+        Platform(250, SCREEN_HEIGHT - 120, 80, 20),
+        Platform(450, SCREEN_HEIGHT - 180, 80, 20),
+        Platform(650, SCREEN_HEIGHT - 240, 80, 20),
+        Platform(850, SCREEN_HEIGHT - 300, 80, 20),
+        
+        # Second challenge - moving upward with wall jumps
+        Platform(100, SCREEN_HEIGHT - 350, 20, 200),  # Left wall
+        Platform(300, SCREEN_HEIGHT - 350, 20, 200),  # Right wall
+        Platform(100, SCREEN_HEIGHT - 350, 220, 20),  # Top connector
+        
+        # Third challenge - narrow platforms with spikes
+        Platform(400, SCREEN_HEIGHT - 400, 40, 20),
+        Platform(500, SCREEN_HEIGHT - 450, 40, 20),
+        Platform(600, SCREEN_HEIGHT - 500, 40, 20),
+        Platform(700, SCREEN_HEIGHT - 550, 40, 20),
+        Platform(800, SCREEN_HEIGHT - 600, 40, 20),
+        
+        # Fourth challenge - zigzag pattern
+        Platform(700, SCREEN_HEIGHT - 650, 150, 20),
+        Platform(450, SCREEN_HEIGHT - 700, 150, 20),
+        Platform(700, SCREEN_HEIGHT - 750, 150, 20),
+        Platform(450, SCREEN_HEIGHT - 800, 150, 20),
+        
+        # Final platform - small and hard to reach
+        Platform(300, SCREEN_HEIGHT - 850, 100, 20),
+        
+        # Walls
+        Platform(0, 0, 20, SCREEN_HEIGHT),
+        Platform(SCREEN_WIDTH - 20, 0, 20, SCREEN_HEIGHT),
+        
+        # Trap platforms - look normal but have spikes
+        Platform(200, SCREEN_HEIGHT - 200, 100, 20),
+        Platform(500, SCREEN_HEIGHT - 300, 100, 20),
+        Platform(300, SCREEN_HEIGHT - 500, 100, 20),
+        Platform(900, SCREEN_HEIGHT - 450, 100, 20),
+    ]
+    
+    coins = [
+        # Starting area coin
+        Coin(100, SCREEN_HEIGHT - 100),
+        
+        # Floating islands coins - require precise jumps
+        Coin(280, SCREEN_HEIGHT - 170),
+        Coin(480, SCREEN_HEIGHT - 230),
+        Coin(680, SCREEN_HEIGHT - 290),
+        
+        # Wall jump area coins
+        Coin(200, SCREEN_HEIGHT - 400),
+        Coin(150, SCREEN_HEIGHT - 450),
+        
+        # Narrow platforms coins - high risk, high reward
+        Coin(420, SCREEN_HEIGHT - 450),
+        Coin(520, SCREEN_HEIGHT - 500),
+        Coin(620, SCREEN_HEIGHT - 550),
+        Coin(720, SCREEN_HEIGHT - 600),
+        
+        # Zigzag pattern coins
+        Coin(750, SCREEN_HEIGHT - 700),
+        Coin(500, SCREEN_HEIGHT - 750),
+        Coin(750, SCREEN_HEIGHT - 800),
+        
+        # Final coin - right before the goal
+        Coin(350, SCREEN_HEIGHT - 900),
+    ]
+    
+    # Many strategic spike placements for extreme challenge
+    spikes = [
+        # Gap between starting platform and first floating island
+        Spike(150, SCREEN_HEIGHT - 40, 100),
+        
+        # Spikes on trap platforms
+        Spike(220, SCREEN_HEIGHT - 200 - 15, 60),
+        Spike(520, SCREEN_HEIGHT - 300 - 15, 60),
+        Spike(320, SCREEN_HEIGHT - 500 - 15, 60),
+        Spike(920, SCREEN_HEIGHT - 450 - 15, 60),
+        
+        # Spikes between narrow platforms
+        Spike(440, SCREEN_HEIGHT - 400, 60),
+        Spike(540, SCREEN_HEIGHT - 450, 60),
+        Spike(640, SCREEN_HEIGHT - 500, 60),
+        Spike(740, SCREEN_HEIGHT - 550, 60),
+        
+        # Spikes on zigzag pattern
+        Spike(600, SCREEN_HEIGHT - 650 - 15, 50),
+        Spike(550, SCREEN_HEIGHT - 700 - 15, 50),
+        Spike(600, SCREEN_HEIGHT - 750 - 15, 50),
+        
+        # Spike before final platform
+        Spike(400, SCREEN_HEIGHT - 850, 50),
+    ]
+    
+    total_coins = len(coins)
+    
+    return platforms, coins, total_coins, spikes
+
 def update_goal_position(world, level):
-    is_door = (level == 3 and world < 2)  # It's a door if it's level 3 and not the last world
+    is_door = (level == 3 and world < 3)  # It's a door if it's level 3 and not the last world
     
     if world == 1:
         if level == 1:
             return Goal(SCREEN_WIDTH - 100, SCREEN_HEIGHT - 120, is_door=False)
         elif level == 2:
-            return Goal(700, SCREEN_HEIGHT - 730, is_door=False)  # Positioned directly on the top platform
+            return Goal(700, SCREEN_HEIGHT - 730, is_door=False)
         elif level == 3:
-            return Goal(700, SCREEN_HEIGHT - 830, is_door=is_door)  # Door at the top platform for level 3
+            return Goal(700, SCREEN_HEIGHT - 830, is_door=is_door)
     elif world == 2:
         if level == 1:
-            return Goal(900, SCREEN_HEIGHT - 450, is_door=False)  # On the upper platform
+            return Goal(900, SCREEN_HEIGHT - 450, is_door=False)
         elif level == 2:
-            return Goal(700, SCREEN_HEIGHT - 600, is_door=False)  # On the upper platform
+            return Goal(850, SCREEN_HEIGHT - 680, is_door=False)
         elif level == 3:
-            return Goal(500, SCREEN_HEIGHT - 700, is_door=False)  # On the top platform
+            return Goal(500, SCREEN_HEIGHT - 700, is_door=is_door)
+    elif world == 3:
+        if level == 1:
+            return Goal(900, SCREEN_HEIGHT - 600, is_door=False)
+        elif level == 2:
+            return Goal(900, SCREEN_HEIGHT - 650, is_door=False)
+        elif level == 3:
+            return Goal(350, SCREEN_HEIGHT - 900, is_door=False)  # Updated position for the final goal
 
 # Create a Star class for the night sky background
 class Star:
