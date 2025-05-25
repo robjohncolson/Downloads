@@ -472,7 +472,7 @@ class LevelEditor:
         self.level_name = "New Level"
         self.background_type = "day"
         
-        # Camera
+        # Camera - removed restrictive bounds
         self.camera_x = 0
         self.camera_y = 0
         
@@ -490,34 +490,92 @@ class LevelEditor:
         print("WASD: Move camera, G: Toggle grid, Tab: Switch spawn point")
         print("Ctrl+S: Save As, Ctrl+L: Load Browser, Ctrl+N: New level")
         print("B: Toggle background (day/night), F11: Toggle fullscreen")
+        print("F: Frame all objects, R: Reset camera")
         print("ESC: Exit")
         print("========================================")
     
-    def toggle_fullscreen(self):
-        """Toggle between fullscreen and windowed mode"""
-        self.fullscreen = not self.fullscreen
+    def calculate_level_bounds(self):
+        """Calculate the actual bounds of all objects in the level"""
+        if not (self.platforms or self.coins or self.spikes or self.goal):
+            return {"min_x": -500, "max_x": 1780, "min_y": -500, "max_y": 1220}
         
-        if self.fullscreen:
-            # Get the current display info to use native resolution
-            info = pygame.display.Info()
-            self.screen = pygame.display.set_mode((info.current_w, info.current_h), pygame.FULLSCREEN)
-            print(f"Switched to fullscreen mode ({info.current_w}x{info.current_h})")
-        else:
-            self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-            print(f"Switched to windowed mode ({WINDOW_WIDTH}x{WINDOW_HEIGHT})")
+        min_x = float('inf')
+        max_x = float('-inf')
+        min_y = float('inf')
+        max_y = float('-inf')
         
-        # Update browser dimensions if browser exists
-        if self.browser:
-            screen_width, screen_height = self.screen.get_size()
-            self.browser.browser_rect = pygame.Rect(200, 100, min(880, screen_width - 400), min(520, screen_height - 200))
-            self.browser.list_rect = pygame.Rect(220, 180, min(400, screen_width - 860), min(400, screen_height - 320))
-            self.browser.preview_rect = pygame.Rect(640, 180, min(420, screen_width - 640), min(400, screen_height - 320))
+        # Check platforms
+        for platform in self.platforms:
+            min_x = min(min_x, platform["x"])
+            max_x = max(max_x, platform["x"] + platform["width"])
+            min_y = min(min_y, platform["y"])
+            max_y = max(max_y, platform["y"] + platform["height"])
+        
+        # Check coins
+        for coin in self.coins:
+            min_x = min(min_x, coin["x"] - 20)
+            max_x = max(max_x, coin["x"] + 20)
+            min_y = min(min_y, coin["y"] - 20)
+            max_y = max(max_y, coin["y"] + 20)
+        
+        # Check spikes
+        for spike in self.spikes:
+            min_x = min(min_x, spike["x"])
+            max_x = max(max_x, spike["x"] + spike["width"])
+            min_y = min(min_y, spike["y"])
+            max_y = max(max_y, spike["y"] + spike["height"])
+        
+        # Check goal
+        if self.goal:
+            min_x = min(min_x, self.goal["x"])
+            max_x = max(max_x, self.goal["x"] + 60)
+            min_y = min(min_y, self.goal["y"])
+            max_y = max(max_y, self.goal["y"] + 80)
+        
+        # Check spawns
+        for spawn in self.player_spawns:
+            min_x = min(min_x, spawn["x"] - 25)
+            max_x = max(max_x, spawn["x"] + 25)
+            min_y = min(min_y, spawn["y"] - 25)
+            max_y = max(max_y, spawn["y"] + 25)
+        
+        # Add padding
+        padding = 200
+        return {
+            "min_x": min_x - padding,
+            "max_x": max_x + padding,
+            "min_y": min_y - padding,
+            "max_y": max_y + padding
+        }
     
-    def snap_position(self, pos):
-        if self.snap_to_grid:
-            x, y = pos
-            return (round(x / GRID_SIZE) * GRID_SIZE, round(y / GRID_SIZE) * GRID_SIZE)
-        return pos
+    def frame_all_objects(self):
+        """Center camera to show all objects in the level"""
+        bounds = self.calculate_level_bounds()
+        screen_width, screen_height = self.screen.get_size()
+        
+        # Calculate the actual content size
+        content_width = bounds["max_x"] - bounds["min_x"]
+        content_height = bounds["max_y"] - bounds["min_y"]
+        
+        # If content is smaller than screen, center it
+        if content_width < screen_width:
+            center_x = (bounds["min_x"] + bounds["max_x"]) / 2
+            self.camera_x = center_x - screen_width / 2
+        else:
+            # If content is larger, show from the left edge with some margin
+            self.camera_x = bounds["min_x"] - 100
+        
+        if content_height < screen_height:
+            center_y = (bounds["min_y"] + bounds["max_y"]) / 2
+            self.camera_y = center_y - screen_height / 2
+        else:
+            # If content is larger, show from the top edge with some margin
+            self.camera_y = bounds["min_y"] - 100
+        
+        print(f"Framed level: bounds X({bounds['min_x']:.0f} to {bounds['max_x']:.0f}) Y({bounds['min_y']:.0f} to {bounds['max_y']:.0f})")
+        print(f"Content size: {content_width:.0f} x {content_height:.0f}")
+        print(f"Screen size: {screen_width} x {screen_height}")
+        print(f"Camera positioned at ({self.camera_x:.0f}, {self.camera_y:.0f})")
     
     def handle_events(self):
         # Handle browser events first if browser is open
@@ -530,15 +588,16 @@ class LevelEditor:
         
         keys = pygame.key.get_pressed()
         
-        # Camera movement
+        # Camera movement - no constraints, allow free movement
+        camera_speed = 10 if keys[pygame.K_LSHIFT] else 5
         if keys[pygame.K_w]:
-            self.camera_y -= 5
+            self.camera_y -= camera_speed
         if keys[pygame.K_s]:
-            self.camera_y += 5
+            self.camera_y += camera_speed
         if keys[pygame.K_a]:
-            self.camera_x -= 5
+            self.camera_x -= camera_speed
         if keys[pygame.K_d]:
-            self.camera_x += 5
+            self.camera_x += camera_speed
         
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -549,6 +608,12 @@ class LevelEditor:
                     return False
                 elif event.key == pygame.K_F11:
                     self.toggle_fullscreen()
+                elif event.key == pygame.K_f:
+                    self.frame_all_objects()
+                elif event.key == pygame.K_r:
+                    self.camera_x = 0
+                    self.camera_y = 0
+                    print("Camera reset to origin")
                 elif event.key == pygame.K_1:
                     self.mode = "platform"
                     print("Platform mode")
@@ -729,6 +794,8 @@ class LevelEditor:
         self.background_type = "day"
         self.world = 1
         self.level = 1
+        self.camera_x = 0
+        self.camera_y = 0
         print("Created new level")
     
     def draw_grid(self):
@@ -820,12 +887,13 @@ class LevelEditor:
         screen_width, screen_height = self.screen.get_size()
         
         # Background panel
-        ui_rect = pygame.Rect(10, 10, 350, 260)
+        ui_rect = pygame.Rect(10, 10, 350, 280)
         pygame.draw.rect(self.screen, (0, 0, 0, 128), ui_rect)
         pygame.draw.rect(self.screen, WHITE, ui_rect, 2)
         
         # UI text
         y_pos = 20
+        bounds = self.calculate_level_bounds()
         texts = [
             f"Mode: {self.mode.title()}",
             f"Level: {self.level_name}",
@@ -835,8 +903,9 @@ class LevelEditor:
             f"Coins: {len(self.coins)}",
             f"Spikes: {len(self.spikes)}",
             f"Grid: {'ON' if self.show_grid else 'OFF'}",
-            f"Camera: ({self.camera_x}, {self.camera_y})",
-            f"Display: {'Fullscreen' if self.fullscreen else 'Windowed'} ({screen_width}x{screen_height})"
+            f"Camera: ({self.camera_x:.0f}, {self.camera_y:.0f})",
+            f"Display: {'Fullscreen' if self.fullscreen else 'Windowed'} ({screen_width}x{screen_height})",
+            f"Level bounds: X({bounds['min_x']:.0f} to {bounds['max_x']:.0f}) Y({bounds['min_y']:.0f} to {bounds['max_y']:.0f})"
         ]
         
         if self.mode == "spawn":
@@ -874,6 +943,26 @@ class LevelEditor:
             self.clock.tick(60)
         
         pygame.quit()
+
+    def toggle_fullscreen(self):
+        """Toggle between fullscreen and windowed mode"""
+        self.fullscreen = not self.fullscreen
+        
+        if self.fullscreen:
+            # Get the current display info to use native resolution
+            info = pygame.display.Info()
+            self.screen = pygame.display.set_mode((info.current_w, info.current_h), pygame.FULLSCREEN)
+            print(f"Switched to fullscreen mode ({info.current_w}x{info.current_h})")
+        else:
+            self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+            print(f"Switched to windowed mode ({WINDOW_WIDTH}x{WINDOW_HEIGHT})")
+    
+    def snap_position(self, pos):
+        """Snap position to grid if snap_to_grid is enabled"""
+        if self.snap_to_grid:
+            x, y = pos
+            return (round(x / GRID_SIZE) * GRID_SIZE, round(y / GRID_SIZE) * GRID_SIZE)
+        return pos
 
 def main():
     try:
