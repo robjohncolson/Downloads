@@ -1607,37 +1607,37 @@ def main():
                 if goal.is_door:
                     goal.door_open = False
         
-        # Draw everything to virtual screen
+        # Draw everything to screen
         level_data = level_manager.get_current_level_data()
         background_type = level_data.get('background_type', 'day')
         
         if background_type == 'night':
-            virtual_screen.fill(NIGHT_SKY)  # Dark blue for night time
+            screen.fill(NIGHT_SKY)  # Dark blue for night time
             # Update and draw stars
             for star in stars:
                 star.update(time_elapsed)
-                star.draw(virtual_screen)
+                star.draw(screen)
         else:
-            virtual_screen.fill((135, 206, 235))  # Sky blue for day time
+            screen.fill((135, 206, 235))  # Sky blue for day time
         
         # Draw platforms
         for platform in platforms:
-            platform.draw(virtual_screen)
+            platform.draw(screen)
         
         # Draw coins
         for coin in coins:
-            coin.draw(virtual_screen)
+            coin.draw(screen)
         
         # Draw goal
-        goal.draw(virtual_screen)
+        goal.draw(screen)
         
         # Draw players
-        player1.draw(virtual_screen)
-        player2.draw(virtual_screen)
+        player1.draw(screen)
+        player2.draw(screen)
         
         # Draw spikes
         for spike in spikes:
-            spike.draw(virtual_screen)
+            spike.draw(screen)
         
         # Draw spike message if needed
         if show_spike_message:
@@ -1647,22 +1647,22 @@ def main():
             
             message_text = font_large.render("DANGER! SPIKES!", True, RED)
             message_rect = message_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 50))
-            pygame.draw.rect(virtual_screen, WHITE, message_rect.inflate(40, 20))
-            pygame.draw.rect(virtual_screen, BLACK, message_rect.inflate(40, 20), 3)
-            virtual_screen.blit(message_text, message_rect)
+            pygame.draw.rect(screen, WHITE, message_rect.inflate(40, 20))
+            pygame.draw.rect(screen, BLACK, message_rect.inflate(40, 20), 3)
+            screen.blit(message_text, message_rect)
             
             sub_message = font_medium.render("Returning to beginning of world...", True, BLACK)
             sub_rect = sub_message.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 20))
-            virtual_screen.blit(sub_message, sub_rect)
+            screen.blit(sub_message, sub_rect)
         
         # Draw UI
         collected_coins = player1.collected_coins + player2.collected_coins
         score_text = font_medium.render(f"Coins: {collected_coins}/{total_coins}", True, BLACK)
-        virtual_screen.blit(score_text, (20, 20))
+        screen.blit(score_text, (20, 20))
         
         # Display current world and level
         level_text = font_medium.render(f"World: {level_manager.current_world} Level: {level_manager.current_level}", True, BLACK)
-        virtual_screen.blit(level_text, (20, 60))
+        screen.blit(level_text, (20, 60))
         
         # Draw instructions
         instructions = [
@@ -1676,7 +1676,7 @@ def main():
         
         for i, instruction in enumerate(instructions):
             inst_text = font_small.render(instruction, True, BLACK)
-            virtual_screen.blit(inst_text, (20, SCREEN_HEIGHT - 100 + i * 25))
+            screen.blit(inst_text, (20, SCREEN_HEIGHT - 100 + i * 25))
         
         if game_complete:
             if all_levels_complete:
