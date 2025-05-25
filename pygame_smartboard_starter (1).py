@@ -15,7 +15,7 @@ SCREEN_WIDTH = infoObject.current_w
 SCREEN_HEIGHT = infoObject.current_h
 
 # You can switch between fullscreen and windowed mode
-FULLSCREEN = True
+FULLSCREEN = False  # Changed to False to use windowed mode
 
 if FULLSCREEN:
     try:
@@ -1555,6 +1555,11 @@ def main():
                     goal = create_goal_from_level_data(level_manager)
                     game_complete = False
                     all_levels_complete = False
+                elif event.key == pygame.K_F11:
+                    # Toggle fullscreen
+                    global FULLSCREEN
+                    FULLSCREEN = not FULLSCREEN
+                    setup_display()
         
         if not game_complete:
             # Update game objects
@@ -1602,37 +1607,37 @@ def main():
                 if goal.is_door:
                     goal.door_open = False
         
-        # Draw everything
+        # Draw everything to virtual screen
         level_data = level_manager.get_current_level_data()
         background_type = level_data.get('background_type', 'day')
         
         if background_type == 'night':
-            screen.fill(NIGHT_SKY)  # Dark blue for night time
+            virtual_screen.fill(NIGHT_SKY)  # Dark blue for night time
             # Update and draw stars
             for star in stars:
                 star.update(time_elapsed)
-                star.draw(screen)
+                star.draw(virtual_screen)
         else:
-            screen.fill((135, 206, 235))  # Sky blue for day time
+            virtual_screen.fill((135, 206, 235))  # Sky blue for day time
         
         # Draw platforms
         for platform in platforms:
-            platform.draw(screen)
+            platform.draw(virtual_screen)
         
         # Draw coins
         for coin in coins:
-            coin.draw(screen)
+            coin.draw(virtual_screen)
         
         # Draw goal
-        goal.draw(screen)
+        goal.draw(virtual_screen)
         
         # Draw players
-        player1.draw(screen)
-        player2.draw(screen)
+        player1.draw(virtual_screen)
+        player2.draw(virtual_screen)
         
         # Draw spikes
         for spike in spikes:
-            spike.draw(screen)
+            spike.draw(virtual_screen)
         
         # Draw spike message if needed
         if show_spike_message:
@@ -1642,22 +1647,22 @@ def main():
             
             message_text = font_large.render("DANGER! SPIKES!", True, RED)
             message_rect = message_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 50))
-            pygame.draw.rect(screen, WHITE, message_rect.inflate(40, 20))
-            pygame.draw.rect(screen, BLACK, message_rect.inflate(40, 20), 3)
-            screen.blit(message_text, message_rect)
+            pygame.draw.rect(virtual_screen, WHITE, message_rect.inflate(40, 20))
+            pygame.draw.rect(virtual_screen, BLACK, message_rect.inflate(40, 20), 3)
+            virtual_screen.blit(message_text, message_rect)
             
             sub_message = font_medium.render("Returning to beginning of world...", True, BLACK)
             sub_rect = sub_message.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 20))
-            screen.blit(sub_message, sub_rect)
+            virtual_screen.blit(sub_message, sub_rect)
         
         # Draw UI
         collected_coins = player1.collected_coins + player2.collected_coins
         score_text = font_medium.render(f"Coins: {collected_coins}/{total_coins}", True, BLACK)
-        screen.blit(score_text, (20, 20))
+        virtual_screen.blit(score_text, (20, 20))
         
         # Display current world and level
         level_text = font_medium.render(f"World: {level_manager.current_world} Level: {level_manager.current_level}", True, BLACK)
-        screen.blit(level_text, (20, 60))
+        virtual_screen.blit(level_text, (20, 60))
         
         # Draw instructions
         instructions = [
@@ -1666,12 +1671,12 @@ def main():
             "Players can stand on each other to reach higher platforms!",
             "Jump off walls to reach higher areas!",
             "Collect all coins and reach the flag together!",
-            "Press 1, 2, or 3 to switch levels, R to restart, ESC to exit"
+            "Press 1, 2, or 3 to switch levels, R to restart, F11 for fullscreen, ESC to exit"
         ]
         
         for i, instruction in enumerate(instructions):
             inst_text = font_small.render(instruction, True, BLACK)
-            screen.blit(inst_text, (20, SCREEN_HEIGHT - 100 + i * 25))
+            virtual_screen.blit(inst_text, (20, SCREEN_HEIGHT - 100 + i * 25))
         
         if game_complete:
             if all_levels_complete:
