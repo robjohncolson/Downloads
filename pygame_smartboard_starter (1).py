@@ -2,8 +2,6 @@ import pygame
 import sys
 import math
 import random
-import json
-import os
 
 # Initialize Pygame
 pygame.init()
@@ -15,26 +13,15 @@ SCREEN_WIDTH = infoObject.current_w
 SCREEN_HEIGHT = infoObject.current_h
 
 # You can switch between fullscreen and windowed mode
-FULLSCREEN = False  # Changed to False to use windowed mode
+FULLSCREEN = True
 
 if FULLSCREEN:
-    try:
-        # Try fullscreen first
-        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
-        print(f"Fullscreen mode: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
-    except pygame.error as e:
-        print(f"Fullscreen failed: {e}")
-        print("Falling back to windowed mode...")
-        FULLSCREEN = False
-        SCREEN_WIDTH = 1280
-        SCREEN_HEIGHT = 720
-        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
 else:
     SCREEN_WIDTH = 1280
     SCREEN_HEIGHT = 720
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
-print(f"Display mode: {'Fullscreen' if FULLSCREEN else 'Windowed'} - {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
 pygame.display.set_caption("Classroom Platformer")
 
 # Colors
@@ -64,228 +51,23 @@ JUMP_STRENGTH = -15
 MOVE_SPEED = 5
 FRICTION = 0.9
 
-# Synthesized sound generation functions
-def generate_tone(frequency, duration, sample_rate=22050, volume=0.5):
-    """Generate a sine wave tone"""
-    frames = int(duration * sample_rate)
-    arr = []
-    for i in range(frames):
-        wave = 4096 * volume * math.sin(2 * math.pi * frequency * i / sample_rate)
-        arr.append([int(wave), int(wave)])
-    return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
-
-def generate_coin_sound():
-    """Generate a pleasant coin collection sound - melodic arpeggio"""
-    sample_rate = 22050
-    duration = 0.5
-    frames = int(duration * sample_rate)
-    arr = []
-    
-    # C major arpeggio: C5 -> E5 -> G5 -> C6
-    notes = [523, 659, 784, 1047]  # C5, E5, G5, C6
-    note_duration = duration / len(notes)
-    
-    for i in range(frames):
-        t = i / sample_rate
-        note_index = min(int(t / note_duration), len(notes) - 1)
-        note_t = (t % note_duration) / note_duration
-        
-        freq = notes[note_index]
-        
-        # Add harmonics for richer sound
-        fundamental = math.sin(2 * math.pi * freq * t)
-        harmonic2 = 0.3 * math.sin(2 * math.pi * freq * 2 * t)
-        harmonic3 = 0.1 * math.sin(2 * math.pi * freq * 3 * t)
-        
-        # Bell-like envelope
-        envelope = math.exp(-note_t * 3) * math.sin(math.pi * note_t)
-        
-        wave = 2048 * 0.4 * (fundamental + harmonic2 + harmonic3) * envelope
-        arr.append([int(wave), int(wave)])
-    
-    return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
-
-def generate_jump_sound():
-    """Generate a melodic jump sound - perfect fifth interval"""
-    sample_rate = 22050
-    duration = 0.25
-    frames = int(duration * sample_rate)
-    arr = []
-    
-    # Perfect fifth: C4 to G4 (musical interval)
-    start_freq, end_freq = 262, 392  # C4 to G4
-    
-    for i in range(frames):
-        t = i / sample_rate
-        progress = t / duration
-        
-        # Smooth frequency transition using sine curve
-        freq_progress = 0.5 * (1 - math.cos(math.pi * progress))
-        freq = start_freq + (end_freq - start_freq) * freq_progress
-        
-        # Add harmonics for richer sound
-        fundamental = math.sin(2 * math.pi * freq * t)
-        harmonic2 = 0.2 * math.sin(2 * math.pi * freq * 2 * t)
-        
-        # Musical envelope - attack, sustain, decay
-        if progress < 0.1:  # Attack
-            envelope = progress / 0.1
-        elif progress < 0.7:  # Sustain
-            envelope = 1.0
-        else:  # Decay
-            envelope = (1.0 - progress) / 0.3
-        
-        wave = 2048 * 0.6 * (fundamental + harmonic2) * envelope
-        arr.append([int(wave), int(wave)])
-    
-    return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
-
-def generate_level_complete_sound():
-    """Generate a melodic victory fanfare - classic video game melody"""
-    sample_rate = 22050
-    duration = 1.5
-    frames = int(duration * sample_rate)
-    arr = []
-    
-    # Classic victory melody: C-C-C-C-G-G-G-G-A-A-A-A-C6
-    melody = [
-        (523, 0.1), (523, 0.1), (523, 0.1), (523, 0.1),  # C5 x4
-        (784, 0.1), (784, 0.1), (784, 0.1), (784, 0.1),  # G5 x4
-        (880, 0.15), (880, 0.15), (880, 0.15),           # A5 x3
-        (1047, 0.4)                                       # C6 (long)
-    ]
-    
-    current_time = 0
-    
-    for i in range(frames):
-        t = i / sample_rate
-        wave = 0
-        
-        # Find current note
-        note_time = 0
-        current_note = None
-        for note_freq, note_dur in melody:
-            if note_time <= t < note_time + note_dur:
-                current_note = (note_freq, t - note_time, note_dur)
-                break
-            note_time += note_dur
-        
-        if current_note:
-            freq, note_t, note_dur = current_note
-            
-            # Add harmonics for richer sound
-            fundamental = math.sin(2 * math.pi * freq * t)
-            harmonic2 = 0.3 * math.sin(2 * math.pi * freq * 2 * t)
-            harmonic3 = 0.1 * math.sin(2 * math.pi * freq * 3 * t)
-            
-            # Note envelope
-            note_progress = note_t / note_dur
-            if note_progress < 0.1:  # Attack
-                envelope = note_progress / 0.1
-            elif note_progress < 0.8:  # Sustain
-                envelope = 1.0
-            else:  # Release
-                envelope = (1.0 - note_progress) / 0.2
-            
-            wave = 2048 * 0.4 * (fundamental + harmonic2 + harmonic3) * envelope
-        
-        arr.append([int(wave), int(wave)])
-    
-    return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
-
-def generate_explosion_sound():
-    """Generate a melodic death sound - sad descending melody"""
-    sample_rate = 22050
-    duration = 1.2
-    frames = int(duration * sample_rate)
-    arr = []
-    
-    # Sad, melodic descending phrase - like a "wah wah wah" cartoon death
-    # Using a minor scale descent: G5 -> F5 -> Eb5 -> D5 -> C5
-    melody = [
-        (784, 0.2),   # G5
-        (698, 0.2),   # F5  
-        (622, 0.2),   # Eb5
-        (587, 0.3),   # D5
-        (523, 0.3)    # C5 (longer, final note)
-    ]
-    
-    for i in range(frames):
-        t = i / sample_rate
-        wave = 0
-        
-        # Find current note
-        note_time = 0
-        current_note = None
-        for note_freq, note_dur in melody:
-            if note_time <= t < note_time + note_dur:
-                current_note = (note_freq, t - note_time, note_dur)
-                break
-            note_time += note_dur
-        
-        if current_note:
-            freq, note_t, note_dur = current_note
-            note_progress = note_t / note_dur
-            
-            # Add vibrato for expressive effect
-            vibrato_freq = 5  # 5 Hz vibrato
-            vibrato_depth = 0.02  # 2% frequency modulation
-            freq_with_vibrato = freq * (1 + vibrato_depth * math.sin(2 * math.pi * vibrato_freq * t))
-            
-            # Generate rich harmonic content
-            fundamental = math.sin(2 * math.pi * freq_with_vibrato * t)
-            harmonic2 = 0.3 * math.sin(2 * math.pi * freq_with_vibrato * 2 * t)
-            harmonic3 = 0.1 * math.sin(2 * math.pi * freq_with_vibrato * 3 * t)
-            
-            # Sad, droopy envelope - starts strong, fades with a droop
-            if note_progress < 0.1:  # Quick attack
-                envelope = note_progress / 0.1
-            else:  # Sad, drooping decay
-                envelope = math.exp(-(note_progress - 0.1) * 2) * (1 - note_progress * 0.3)
-            
-            # Overall volume that decreases through the phrase
-            phrase_progress = t / duration
-            overall_volume = (1 - phrase_progress * 0.7)  # Fade to 30% by end
-            
-            wave = 2048 * 0.5 * (fundamental + harmonic2 + harmonic3) * envelope * overall_volume
-        
-        arr.append([int(wave), int(wave)])
-    
-    return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
-
-# Generate synthesized sounds
+# Load sounds
 try:
-    import numpy
+    # Try to load MP3 files
+    coin_sound = pygame.mixer.Sound("coin.mp3")  # Use your MP3 file
+    level_complete_sound = pygame.mixer.Sound("level_complete.mp3")  # Use your MP3 file
+    jump_sound = pygame.mixer.Sound("jump.mp3")  # Use your MP3 file
+    explosion_sound = pygame.mixer.Sound("explosion.mp3")  # Add this line
     
-    coin_sound = generate_coin_sound()
-    level_complete_sound = generate_level_complete_sound()
-    jump_sound = generate_jump_sound()
-    explosion_sound = generate_explosion_sound()
+    # Set volume
+    coin_sound.set_volume(0.3)
+    level_complete_sound.set_volume(0.5)
+    jump_sound.set_volume(0.2)
+    explosion_sound.set_volume(1.0)
     
-    print("Successfully generated synthesized sounds")
-except ImportError:
-    print("Warning: NumPy not available for sound synthesis. Installing fallback sounds...")
-    # Fallback to simple tones without numpy
-    try:
-        coin_sound = generate_tone(523, 0.2, volume=0.3)  # C5 note
-        level_complete_sound = generate_tone(659, 0.5, volume=0.5)  # E5 note
-        jump_sound = generate_tone(300, 0.1, volume=0.2)  # Lower tone
-        explosion_sound = generate_tone(100, 0.3, volume=0.8)  # Low rumble
-        print("Using simple tone fallbacks")
-    except Exception as e:
-        print(f"Warning: Could not generate sounds: {e}")
-        print("Game will run without sound.")
-        # Create dummy sound objects that do nothing when played
-        class DummySound:
-            def play(self): pass
-            def set_volume(self, vol): pass
-        
-        coin_sound = DummySound()
-        level_complete_sound = DummySound()
-        jump_sound = DummySound()
-        explosion_sound = DummySound()
+    print("Successfully loaded MP3 sound files")
 except Exception as e:
-    print(f"Warning: Sound synthesis failed: {e}")
+    print(f"Warning: Sound files could not be loaded: {e}")
     print("Game will run without sound.")
     # Create dummy sound objects that do nothing when played
     class DummySound:
@@ -295,65 +77,11 @@ except Exception as e:
     coin_sound = DummySound()
     level_complete_sound = DummySound()
     jump_sound = DummySound()
-    explosion_sound = DummySound()
+    explosion_sound = DummySound()  # Add this line
 
 # Add these constants for the night sky
 NIGHT_SKY = (25, 25, 50)  # Dark blue for night sky
 STAR_COLOR = (255, 255, 200)  # Yellowish white for stars
-
-def setup_display():
-    """Setup display mode (fullscreen or windowed)"""
-    global screen, SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN
-    
-    if FULLSCREEN:
-        try:
-            # Get the current display info for fullscreen
-            infoObject = pygame.display.Info()
-            SCREEN_WIDTH = infoObject.current_w
-            SCREEN_HEIGHT = infoObject.current_h
-            screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
-            print(f"Switched to fullscreen: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
-        except pygame.error as e:
-            print(f"Fullscreen failed: {e}")
-            print("Falling back to windowed mode...")
-            FULLSCREEN = False
-            SCREEN_WIDTH = 1280
-            SCREEN_HEIGHT = 720
-            screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-            print(f"Windowed mode: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
-    else:
-        SCREEN_WIDTH = 1280
-        SCREEN_HEIGHT = 720
-        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        print(f"Switched to windowed mode: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
-
-def get_text_color(background_color):
-    """
-    Determine the best text color (black or white) based on background brightness.
-    Uses the luminance formula to calculate brightness.
-    """
-    if isinstance(background_color, tuple) and len(background_color) >= 3:
-        r, g, b = background_color[:3]
-    else:
-        # Default to black text if we can't determine background
-        return BLACK
-    
-    # Calculate luminance using the standard formula
-    # Luminance = 0.299*R + 0.587*G + 0.114*B
-    luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
-    
-    # If background is bright (luminance > 0.5), use black text
-    # If background is dark (luminance <= 0.5), use white text
-    return BLACK if luminance > 0.5 else WHITE
-
-def get_current_background_color(level_data):
-    """Get the current background color based on level data"""
-    background_type = level_data.get('background_type', 'day')
-    
-    if background_type == 'night':
-        return NIGHT_SKY  # Dark blue for night time
-    else:
-        return (135, 206, 235)  # Sky blue for day time
 
 class Player:
     def __init__(self, x, y, color, player_num):
@@ -384,7 +112,6 @@ class Player:
         self.death_center_x = 0  # Target x position for center movement
         self.death_center_y = 0  # Target y position for center movement
         self.surprised_face = False  # For the "OH!" expression
-        self.eye_direction = 0  # -1 for left, 0 for center, 1 for right
         
     def update(self, platforms, coins, keys_pressed, other_players=None):
         # If player is in dying animation, update particles and return
@@ -407,13 +134,10 @@ class Player:
         if self.player_num == 1:
             if keys_pressed[pygame.K_a]:
                 self.vel_x = -MOVE_SPEED
-                self.eye_direction = -1  # Look left
             elif keys_pressed[pygame.K_d]:
                 self.vel_x = MOVE_SPEED
-                self.eye_direction = 1   # Look right
             else:
                 self.vel_x *= FRICTION
-                self.eye_direction = 0   # Look center when not moving
                 
             # Check if player can jump
             can_normal_jump = self.on_ground or self.standing_on_player
@@ -435,13 +159,10 @@ class Player:
         elif self.player_num == 2:
             if keys_pressed[pygame.K_LEFT]:
                 self.vel_x = -MOVE_SPEED
-                self.eye_direction = -1  # Look left
             elif keys_pressed[pygame.K_RIGHT]:
                 self.vel_x = MOVE_SPEED
-                self.eye_direction = 1   # Look right
             else:
                 self.vel_x *= FRICTION
-                self.eye_direction = 0   # Look center when not moving
                 
             # Check if player can jump
             can_normal_jump = self.on_ground or self.standing_on_player
@@ -600,12 +321,12 @@ class Player:
                 self.death_phase = 2  # Growth phase
         
         elif self.death_phase == 2:  # Growth phase
-            # Calculate growth factor (from 1x to 3x over 30 frames) - much smaller expansion
+            # Calculate growth factor (from 1x to 20x over 30 frames)
             remaining_growth_time = max(0, self.death_timer - 15)  # Last 15 frames reserved for explosion
             if remaining_growth_time > 0:
-                # Grow from 1x to 3x size (much more reasonable)
+                # Grow from 1x to 20x size
                 growth_progress = (30 - remaining_growth_time) / 30
-                growth_factor = 1 + 2 * growth_progress  # 1 to 3 instead of 1 to 20
+                growth_factor = 1 + 19 * growth_progress  # 1 to 20
                 
                 # Store original center for consistent positioning
                 center_x = self.rect.centerx
@@ -619,15 +340,15 @@ class Player:
                 self.rect.centerx = center_x
                 self.rect.centery = center_y
                 
-                # If we've reached near maximum size, create explosion
-                if growth_factor >= 2.8:
+                # If we've reached maximum size, create explosion
+                if growth_factor >= 19.5:
                     # Create explosion particles
-                    for _ in range(80):  # Fewer particles for smaller explosion
+                    for _ in range(150):  # Even more particles for bigger explosion
                         particle = ExplosionParticle(self.rect.centerx, self.rect.centery)
-                        # Smaller explosion
-                        particle.size = random.randint(3, 8)  # Smaller particles
-                        particle.vel_x = random.uniform(-10, 10)  # Moderate speed particles
-                        particle.vel_y = random.uniform(-10, 10)  # Particles in all directions
+                        # Bigger explosion
+                        particle.size = random.randint(5, 15)  # Larger particles
+                        particle.vel_x = random.uniform(-15, 15)  # Faster particles
+                        particle.vel_y = random.uniform(-15, 15)  # Particles in all directions
                         self.death_particles.append(particle)
                     
                     # Play explosion sound again for the final explosion
@@ -704,8 +425,10 @@ class Player:
                 mouth_size = int(8 * scale_factor)
                 mouth_y = self.rect.top + int(28 * scale_factor)
                 
-                # Draw a filled black circle for the mouth - keep it black inside
+                # Draw a filled black circle for the mouth
                 pygame.draw.circle(screen, BLACK, (self.rect.centerx, mouth_y), mouth_size)
+                # Draw a smaller white circle inside to create the "O" shape
+                pygame.draw.circle(screen, self.color, (self.rect.centerx, mouth_y), max(1, mouth_size - int(2 * scale_factor)))
             
             # Draw explosion particles
             for particle in self.death_particles:
@@ -716,28 +439,13 @@ class Player:
             
             # Draw eyes
             eye_size = 8
-            left_eye_center = (self.rect.left + 12, self.rect.top + 15)
-            right_eye_center = (self.rect.right - 12, self.rect.top + 15)
-            pygame.draw.circle(screen, WHITE, left_eye_center, eye_size)
-            pygame.draw.circle(screen, WHITE, right_eye_center, eye_size)
+            pygame.draw.circle(screen, WHITE, (self.rect.left + 12, self.rect.top + 15), eye_size)
+            pygame.draw.circle(screen, WHITE, (self.rect.right - 12, self.rect.top + 15), eye_size)
             
-            # Draw pupils with directional movement
+            # Draw pupils
             pupil_size = 4
-            pupil_offset = 2  # How far pupils move from center
-            
-            # Calculate pupil positions based on eye direction
-            if self.eye_direction == -1:  # Looking left
-                left_pupil_pos = (left_eye_center[0] - pupil_offset, left_eye_center[1])
-                right_pupil_pos = (right_eye_center[0] - pupil_offset, right_eye_center[1])
-            elif self.eye_direction == 1:  # Looking right
-                left_pupil_pos = (left_eye_center[0] + pupil_offset, left_eye_center[1])
-                right_pupil_pos = (right_eye_center[0] + pupil_offset, right_eye_center[1])
-            else:  # Looking center
-                left_pupil_pos = left_eye_center
-                right_pupil_pos = right_eye_center
-            
-            pygame.draw.circle(screen, BLACK, left_pupil_pos, pupil_size)
-            pygame.draw.circle(screen, BLACK, right_pupil_pos, pupil_size)
+            pygame.draw.circle(screen, BLACK, (self.rect.left + 12, self.rect.top + 15), pupil_size)
+            pygame.draw.circle(screen, BLACK, (self.rect.right - 12, self.rect.top + 15), pupil_size)
             
             # Draw mouth - happy face if all coins collected, normal face otherwise
             mouth_y = self.rect.top + 28
@@ -874,130 +582,44 @@ class LevelManager:
     def __init__(self):
         self.current_world = 1
         self.current_level = 1
-        self.levels_dir = "levels"
-        self.available_levels = self.scan_available_levels()
-        self.max_worlds = max([level['world'] for level in self.available_levels]) if self.available_levels else 1
-        self.max_levels = max([level['level'] for level in self.available_levels if level['world'] == self.current_world]) if self.available_levels else 1
-    
-    def scan_available_levels(self):
-        """Scan the levels directory for available JSON level files"""
-        levels = []
-        if not os.path.exists(self.levels_dir):
-            print(f"Warning: {self.levels_dir} directory not found. Creating it...")
-            os.makedirs(self.levels_dir)
-            return levels
-        
-        for filename in os.listdir(self.levels_dir):
-            if filename.endswith('.json'):
-                try:
-                    with open(os.path.join(self.levels_dir, filename), 'r') as f:
-                        level_data = json.load(f)
-                        levels.append({
-                            'world': level_data.get('world', 1),
-                            'level': level_data.get('level', 1),
-                            'filename': filename,
-                            'name': level_data.get('name', 'Unnamed Level')
-                        })
-                except Exception as e:
-                    print(f"Error loading level {filename}: {e}")
-        
-        # Sort levels by world, then by level
-        levels.sort(key=lambda x: (x['world'], x['level']))
-        return levels
-    
-    def load_level_from_json(self, world, level):
-        """Load a level from JSON file"""
-        # Find the level file
-        level_file = None
-        for level_info in self.available_levels:
-            if level_info['world'] == world and level_info['level'] == level:
-                level_file = level_info['filename']
-                break
-        
-        if not level_file:
-            print(f"Warning: Level {world}-{level} not found. Using fallback.")
-            return self.create_fallback_level()
-        
-        try:
-            with open(os.path.join(self.levels_dir, level_file), 'r') as f:
-                level_data = json.load(f)
-                return self.parse_level_data(level_data)
-        except Exception as e:
-            print(f"Error loading level {level_file}: {e}")
-            return self.create_fallback_level()
-    
-    def parse_level_data(self, level_data):
-        """Parse JSON level data into game objects"""
-        platforms = []
-        coins = []
-        spikes = []
-        
-        # Create platforms
-        for platform_data in level_data.get('platforms', []):
-            color = tuple(platform_data.get('color', [139, 69, 19]))
-            platform = Platform(
-                platform_data['x'],
-                platform_data['y'],
-                platform_data['width'],
-                platform_data['height'],
-                color
-            )
-            platforms.append(platform)
-        
-        # Create coins
-        for coin_data in level_data.get('coins', []):
-            coin = Coin(coin_data['x'], coin_data['y'])
-            coins.append(coin)
-        
-        # Create spikes
-        for spike_data in level_data.get('spikes', []):
-            spike = Spike(
-                spike_data['x'],
-                spike_data['y'],
-                spike_data.get('width', 30),
-                spike_data.get('height', 15)
-            )
-            spikes.append(spike)
-        
-        total_coins = len(coins)
-        
-        # Store additional level info
-        self.current_level_data = level_data
-        
-        return platforms, coins, total_coins, spikes
-    
-    def create_fallback_level(self):
-        """Create a simple fallback level if JSON loading fails"""
-        platforms = [
-            Platform(0, SCREEN_HEIGHT - 40, SCREEN_WIDTH, 40),
-            Platform(200, SCREEN_HEIGHT - 150, 200, 20),
-            Platform(0, 0, 20, SCREEN_HEIGHT - 40),
-            Platform(SCREEN_WIDTH - 20, 0, 20, SCREEN_HEIGHT - 40),
-        ]
-        coins = [Coin(250, SCREEN_HEIGHT - 200)]
-        spikes = []
-        return platforms, coins, 1, spikes
+        self.max_worlds = 3  # Increase to 3 worlds
+        self.max_levels = 3
     
     def get_level(self):
-        return self.load_level_from_json(self.current_world, self.current_level)
-    
-    def get_current_level_data(self):
-        """Get the current level's metadata"""
-        return getattr(self, 'current_level_data', {})
+        if self.current_world == 1:
+            if self.current_level == 1:
+                return create_world1_level_1()
+            elif self.current_level == 2:
+                return create_world1_level_2()
+            elif self.current_level == 3:
+                return create_world1_level_3()
+        elif self.current_world == 2:
+            if self.current_level == 1:
+                return create_world2_level_1()
+            elif self.current_level == 2:
+                return create_world2_level_2()
+            elif self.current_level == 3:
+                return create_world2_level_3()
+        elif self.current_world == 3:  # Add World 3
+            if self.current_level == 1:
+                return create_world3_level_1()
+            elif self.current_level == 2:
+                return create_world3_level_2()
+            elif self.current_level == 3:
+                return create_world3_level_3()
+        
+        # Default fallback
+        return create_world1_level_1()
     
     def next_level(self):
-        # Find next available level
-        current_levels_in_world = [l for l in self.available_levels if l['world'] == self.current_world]
-        max_level_in_world = max([l['level'] for l in current_levels_in_world]) if current_levels_in_world else 1
-        
         self.current_level += 1
-        if self.current_level > max_level_in_world:
+        if self.current_level > self.max_levels:
             self.current_level = 1
             self.current_world += 1
             if self.current_world > self.max_worlds:
                 # All levels complete
                 self.current_world = self.max_worlds
-                self.current_level = max_level_in_world
+                self.current_level = self.max_levels
                 return False
         return True
     
@@ -1465,16 +1087,30 @@ def create_world3_level_3():
     
     return platforms, coins, total_coins, spikes
 
-def create_goal_from_level_data(level_manager):
-    """Create goal from current level data"""
-    level_data = level_manager.get_current_level_data()
-    goal_data = level_data.get('goal', {})
+def update_goal_position(world, level):
+    is_door = (level == 3 and world < 3)  # It's a door if it's level 3 and not the last world
     
-    x = goal_data.get('x', SCREEN_WIDTH - 100)
-    y = goal_data.get('y', SCREEN_HEIGHT - 120)
-    is_door = goal_data.get('is_door', False)
-    
-    return Goal(x, y, is_door)
+    if world == 1:
+        if level == 1:
+            return Goal(SCREEN_WIDTH - 100, SCREEN_HEIGHT - 120, is_door=False)
+        elif level == 2:
+            return Goal(700, SCREEN_HEIGHT - 730, is_door=False)
+        elif level == 3:
+            return Goal(700, SCREEN_HEIGHT - 830, is_door=is_door)
+    elif world == 2:
+        if level == 1:
+            return Goal(900, SCREEN_HEIGHT - 450, is_door=False)
+        elif level == 2:
+            return Goal(850, SCREEN_HEIGHT - 680, is_door=False)
+        elif level == 3:
+            return Goal(500, SCREEN_HEIGHT - 700, is_door=is_door)
+    elif world == 3:
+        if level == 1:
+            return Goal(900, SCREEN_HEIGHT - 600, is_door=False)
+        elif level == 2:
+            return Goal(900, SCREEN_HEIGHT - 650, is_door=False)
+        elif level == 3:
+            return Goal(350, SCREEN_HEIGHT - 900, is_door=False)  # Updated position for the final goal
 
 # Create a Star class for the night sky background
 class Star:
@@ -1498,22 +1134,15 @@ class Star:
         pygame.draw.circle(screen, color, (self.x, self.y), self.size)
 
 def main():
+    # Create game objects
+    player1 = Player(100, SCREEN_HEIGHT - 100, BLUE, 1)
+    player2 = Player(150, SCREEN_HEIGHT - 100, RED, 2)
+    
     level_manager = LevelManager()
     platforms, coins, total_coins, spikes = level_manager.get_level()
     
-    # Get player spawn positions from level data
-    level_data = level_manager.get_current_level_data()
-    player_spawns = level_data.get('player_spawns', [
-        {'x': 100, 'y': SCREEN_HEIGHT - 100},
-        {'x': 150, 'y': SCREEN_HEIGHT - 100}
-    ])
-    
-    # Create game objects with spawn positions
-    player1 = Player(player_spawns[0]['x'], player_spawns[0]['y'], BLUE, 1)
-    player2 = Player(player_spawns[1]['x'], player_spawns[1]['y'], RED, 2)
-    
-    # Set goal position based on level data
-    goal = create_goal_from_level_data(level_manager)
+    # Set goal position based on level
+    goal = update_goal_position(level_manager.current_world, level_manager.current_level)
     
     # Create stars for night sky (World 2)
     stars = [Star() for _ in range(100)]
@@ -1548,7 +1177,7 @@ def main():
                         all_levels_complete = False
                     
                     platforms, coins, total_coins, spikes = level_manager.get_level()
-                    goal = create_goal_from_level_data(level_manager)  # Update goal position
+                    goal = update_goal_position(level_manager.current_world, level_manager.current_level)  # Update goal position
                     game_complete = False
                 elif event.key == pygame.K_n and game_complete and not all_levels_complete:
                     # Next level
@@ -1558,7 +1187,7 @@ def main():
                         player1.collected_coins = 0
                         player2.collected_coins = 0
                         platforms, coins, total_coins, spikes = level_manager.get_level()
-                        goal = create_goal_from_level_data(level_manager)  # Update goal position
+                        goal = update_goal_position(level_manager.current_world, level_manager.current_level)  # Update goal position
                         game_complete = False
                         
                         # Show world transition message if we just moved to a new world
@@ -1584,7 +1213,7 @@ def main():
                     player1.collected_coins = 0
                     player2.collected_coins = 0
                     platforms, coins, total_coins, spikes = level_manager.get_level()
-                    goal = create_goal_from_level_data(level_manager)
+                    goal = update_goal_position(level_manager.current_world, level_manager.current_level)
                     game_complete = False
                     all_levels_complete = False
                 elif event.key == pygame.K_2:
@@ -1595,7 +1224,7 @@ def main():
                     player1.collected_coins = 0
                     player2.collected_coins = 0
                     platforms, coins, total_coins, spikes = level_manager.get_level()
-                    goal = create_goal_from_level_data(level_manager)
+                    goal = update_goal_position(level_manager.current_world, level_manager.current_level)
                     game_complete = False
                     all_levels_complete = False
                 elif event.key == pygame.K_3:
@@ -1606,14 +1235,9 @@ def main():
                     player1.collected_coins = 0
                     player2.collected_coins = 0
                     platforms, coins, total_coins, spikes = level_manager.get_level()
-                    goal = create_goal_from_level_data(level_manager)
+                    goal = update_goal_position(level_manager.current_world, level_manager.current_level)
                     game_complete = False
                     all_levels_complete = False
-                elif event.key == pygame.K_F11:
-                    # Toggle fullscreen
-                    global FULLSCREEN
-                    FULLSCREEN = not FULLSCREEN
-                    setup_display()
         
         if not game_complete:
             # Update game objects
@@ -1661,20 +1285,15 @@ def main():
                 if goal.is_door:
                     goal.door_open = False
         
-        # Draw everything to screen
-        level_data = level_manager.get_current_level_data()
-        background_type = level_data.get('background_type', 'day')
-        background_color = get_current_background_color(level_data)
-        text_color = get_text_color(background_color)
-        
-        if background_type == 'night':
-            screen.fill(NIGHT_SKY)  # Dark blue for night time
+        # Draw everything
+        if level_manager.current_world == 1:
+            screen.fill((135, 206, 235))  # Sky blue for day time (World 1)
+        else:
+            screen.fill(NIGHT_SKY)  # Dark blue for night time (World 2)
             # Update and draw stars
             for star in stars:
                 star.update(time_elapsed)
                 star.draw(screen)
-        else:
-            screen.fill((135, 206, 235))  # Sky blue for day time
         
         # Draw platforms
         for platform in platforms:
@@ -1711,27 +1330,27 @@ def main():
             sub_rect = sub_message.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 20))
             screen.blit(sub_message, sub_rect)
         
-        # Draw UI with dynamic text color
+        # Draw UI
         collected_coins = player1.collected_coins + player2.collected_coins
-        score_text = font_medium.render(f"Coins: {collected_coins}/{total_coins}", True, text_color)
+        score_text = font_medium.render(f"Coins: {collected_coins}/{total_coins}", True, BLACK)
         screen.blit(score_text, (20, 20))
         
-        # Display current world and level with dynamic text color
-        level_text = font_medium.render(f"World: {level_manager.current_world} Level: {level_manager.current_level}", True, text_color)
+        # Display current world and level
+        level_text = font_medium.render(f"World: {level_manager.current_world} Level: {level_manager.current_level}", True, BLACK)
         screen.blit(level_text, (20, 60))
         
-        # Draw instructions with dynamic text color
+        # Draw instructions
         instructions = [
             "Player 1: WASD to move",
             "Player 2: Arrow keys to move",
             "Players can stand on each other to reach higher platforms!",
             "Jump off walls to reach higher areas!",
             "Collect all coins and reach the flag together!",
-            "Press 1, 2, or 3 to switch levels, R to restart, F11 for fullscreen, ESC to exit"
+            "Press 1, 2, or 3 to switch levels, R to restart, ESC to exit"
         ]
         
         for i, instruction in enumerate(instructions):
-            inst_text = font_small.render(instruction, True, text_color)
+            inst_text = font_small.render(instruction, True, BLACK)
             screen.blit(inst_text, (20, SCREEN_HEIGHT - 100 + i * 25))
         
         if game_complete:
