@@ -43,12 +43,32 @@ class LevelBrowser:
         self.save_filename = ""
         self.typing_filename = False
         
-        # UI dimensions
-        self.browser_rect = pygame.Rect(200, 100, 880, 520)
-        self.list_rect = pygame.Rect(220, 180, 400, 400)
-        self.preview_rect = pygame.Rect(640, 180, 420, 400)
+        # UI dimensions - will be updated based on screen size
+        self.update_dimensions()
         
         self.refresh_levels()
+    
+    def update_dimensions(self):
+        """Update UI dimensions based on current screen size"""
+        screen_width, screen_height = self.editor.screen.get_size()
+        
+        # Scale browser to fit screen while maintaining proportions
+        browser_width = min(880, screen_width - 200)
+        browser_height = min(520, screen_height - 200)
+        browser_x = (screen_width - browser_width) // 2
+        browser_y = (screen_height - browser_height) // 2
+        
+        self.browser_rect = pygame.Rect(browser_x, browser_y, browser_width, browser_height)
+        
+        # List takes up left side of browser
+        list_width = min(400, browser_width // 2 - 20)
+        list_height = browser_height - 180
+        self.list_rect = pygame.Rect(browser_x + 20, browser_y + 160, list_width, list_height)
+        
+        # Preview takes up right side
+        preview_width = browser_width - list_width - 60
+        preview_height = list_height
+        self.preview_rect = pygame.Rect(browser_x + list_width + 40, browser_y + 160, preview_width, preview_height)
     
     def refresh_levels(self):
         """Scan the levels directory and build a list of available levels"""
@@ -219,8 +239,14 @@ class LevelBrowser:
             print(f"Save error: {e}")
     
     def draw(self, screen):
+        # Update dimensions in case screen size changed
+        self.update_dimensions()
+        
+        # Get current screen dimensions
+        screen_width, screen_height = screen.get_size()
+        
         # Draw semi-transparent overlay
-        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
+        overlay = pygame.Surface((screen_width, screen_height))
         overlay.set_alpha(128)
         overlay.fill(BLACK)
         screen.blit(overlay, (0, 0))
@@ -339,9 +365,10 @@ class LevelBrowser:
             screen.blit(text, (self.preview_rect.x + 10, y_pos))
             y_pos += 20
         
-        # Draw mini level preview
+        # Draw mini level preview - adjust size based on available space
+        preview_height = max(150, self.preview_rect.height - 200)
         preview_area = pygame.Rect(self.preview_rect.x + 10, y_pos + 20, 
-                                 self.preview_rect.width - 20, 200)
+                                 self.preview_rect.width - 20, preview_height)
         pygame.draw.rect(screen, DARK_GRAY, preview_area)
         pygame.draw.rect(screen, WHITE, preview_area, 1)
         
@@ -414,6 +441,8 @@ class LevelBrowser:
 
 class LevelEditor:
     def __init__(self):
+        # Display settings
+        self.fullscreen = False
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("Enhanced Platformer Level Editor")
         
@@ -460,9 +489,29 @@ class LevelEditor:
         print("Mouse: Left click - Place/Select, Right click - Delete")
         print("WASD: Move camera, G: Toggle grid, Tab: Switch spawn point")
         print("Ctrl+S: Save As, Ctrl+L: Load Browser, Ctrl+N: New level")
-        print("B: Toggle background (day/night)")
+        print("B: Toggle background (day/night), F11: Toggle fullscreen")
         print("ESC: Exit")
         print("========================================")
+    
+    def toggle_fullscreen(self):
+        """Toggle between fullscreen and windowed mode"""
+        self.fullscreen = not self.fullscreen
+        
+        if self.fullscreen:
+            # Get the current display info to use native resolution
+            info = pygame.display.Info()
+            self.screen = pygame.display.set_mode((info.current_w, info.current_h), pygame.FULLSCREEN)
+            print(f"Switched to fullscreen mode ({info.current_w}x{info.current_h})")
+        else:
+            self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+            print(f"Switched to windowed mode ({WINDOW_WIDTH}x{WINDOW_HEIGHT})")
+        
+        # Update browser dimensions if browser exists
+        if self.browser:
+            screen_width, screen_height = self.screen.get_size()
+            self.browser.browser_rect = pygame.Rect(200, 100, min(880, screen_width - 400), min(520, screen_height - 200))
+            self.browser.list_rect = pygame.Rect(220, 180, min(400, screen_width - 860), min(400, screen_height - 320))
+            self.browser.preview_rect = pygame.Rect(640, 180, min(420, screen_width - 640), min(400, screen_height - 320))
     
     def snap_position(self, pos):
         if self.snap_to_grid:
@@ -498,6 +547,8 @@ class LevelEditor:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     return False
+                elif event.key == pygame.K_F11:
+                    self.toggle_fullscreen()
                 elif event.key == pygame.K_1:
                     self.mode = "platform"
                     print("Platform mode")
@@ -684,25 +735,28 @@ class LevelEditor:
         if not self.show_grid:
             return
         
+        # Get current screen dimensions
+        screen_width, screen_height = self.screen.get_size()
+        
         # Calculate visible grid bounds
         start_x = (self.camera_x // GRID_SIZE) * GRID_SIZE
         start_y = (self.camera_y // GRID_SIZE) * GRID_SIZE
-        end_x = start_x + WINDOW_WIDTH + GRID_SIZE
-        end_y = start_y + WINDOW_HEIGHT + GRID_SIZE
+        end_x = start_x + screen_width + GRID_SIZE
+        end_y = start_y + screen_height + GRID_SIZE
         
         # Draw vertical lines
         for x in range(int(start_x), int(end_x), GRID_SIZE):
             screen_x = x - self.camera_x
-            if 0 <= screen_x <= WINDOW_WIDTH:
+            if 0 <= screen_x <= screen_width:
                 color = GRAY if (x // GRID_SIZE) % 5 == 0 else LIGHT_GRAY
-                pygame.draw.line(self.screen, color, (screen_x, 0), (screen_x, WINDOW_HEIGHT))
+                pygame.draw.line(self.screen, color, (screen_x, 0), (screen_x, screen_height))
         
         # Draw horizontal lines
         for y in range(int(start_y), int(end_y), GRID_SIZE):
             screen_y = y - self.camera_y
-            if 0 <= screen_y <= WINDOW_HEIGHT:
+            if 0 <= screen_y <= screen_height:
                 color = GRAY if (y // GRID_SIZE) % 5 == 0 else LIGHT_GRAY
-                pygame.draw.line(self.screen, color, (0, screen_y), (WINDOW_WIDTH, screen_y))
+                pygame.draw.line(self.screen, color, (0, screen_y), (screen_width, screen_y))
     
     def world_to_screen(self, world_pos):
         return (world_pos[0] - self.camera_x, world_pos[1] - self.camera_y)
@@ -762,8 +816,11 @@ class LevelEditor:
             pygame.draw.rect(self.screen, color, (x, y, width, height), 2)
     
     def draw_ui(self):
+        # Get current screen dimensions
+        screen_width, screen_height = self.screen.get_size()
+        
         # Background panel
-        ui_rect = pygame.Rect(10, 10, 350, 240)
+        ui_rect = pygame.Rect(10, 10, 350, 260)
         pygame.draw.rect(self.screen, (0, 0, 0, 128), ui_rect)
         pygame.draw.rect(self.screen, WHITE, ui_rect, 2)
         
@@ -778,7 +835,8 @@ class LevelEditor:
             f"Coins: {len(self.coins)}",
             f"Spikes: {len(self.spikes)}",
             f"Grid: {'ON' if self.show_grid else 'OFF'}",
-            f"Camera: ({self.camera_x}, {self.camera_y})"
+            f"Camera: ({self.camera_x}, {self.camera_y})",
+            f"Display: {'Fullscreen' if self.fullscreen else 'Windowed'} ({screen_width}x{screen_height})"
         ]
         
         if self.mode == "spawn":
