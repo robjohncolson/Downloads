@@ -62,105 +62,180 @@ def generate_tone(frequency, duration, sample_rate=22050, volume=0.5):
     return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
 
 def generate_coin_sound():
-    """Generate a pleasant coin collection sound - ascending notes"""
+    """Generate a pleasant coin collection sound - melodic arpeggio"""
     sample_rate = 22050
-    duration = 0.3
+    duration = 0.5
     frames = int(duration * sample_rate)
     arr = []
     
-    # Two ascending tones
-    freq1, freq2 = 523, 659  # C5 to E5
+    # C major arpeggio: C5 -> E5 -> G5 -> C6
+    notes = [523, 659, 784, 1047]  # C5, E5, G5, C6
+    note_duration = duration / len(notes)
     
     for i in range(frames):
         t = i / sample_rate
-        # First tone fades out, second tone fades in
-        if t < 0.15:
-            wave1 = 2048 * 0.3 * math.sin(2 * math.pi * freq1 * t) * (1 - t/0.15)
-            wave2 = 2048 * 0.3 * math.sin(2 * math.pi * freq2 * t) * (t/0.15)
-        else:
-            wave1 = 0
-            wave2 = 2048 * 0.3 * math.sin(2 * math.pi * freq2 * t) * ((0.3-t)/0.15)
+        note_index = min(int(t / note_duration), len(notes) - 1)
+        note_t = (t % note_duration) / note_duration
         
-        wave = wave1 + wave2
+        freq = notes[note_index]
+        
+        # Add harmonics for richer sound
+        fundamental = math.sin(2 * math.pi * freq * t)
+        harmonic2 = 0.3 * math.sin(2 * math.pi * freq * 2 * t)
+        harmonic3 = 0.1 * math.sin(2 * math.pi * freq * 3 * t)
+        
+        # Bell-like envelope
+        envelope = math.exp(-note_t * 3) * math.sin(math.pi * note_t)
+        
+        wave = 2048 * 0.4 * (fundamental + harmonic2 + harmonic3) * envelope
         arr.append([int(wave), int(wave)])
     
     return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
 
 def generate_jump_sound():
-    """Generate a quick jump sound - rising pitch"""
+    """Generate a melodic jump sound - perfect fifth interval"""
     sample_rate = 22050
-    duration = 0.2
+    duration = 0.25
     frames = int(duration * sample_rate)
     arr = []
     
-    start_freq, end_freq = 200, 400
+    # Perfect fifth: C4 to G4 (musical interval)
+    start_freq, end_freq = 262, 392  # C4 to G4
     
     for i in range(frames):
         t = i / sample_rate
-        # Frequency rises over time
-        freq = start_freq + (end_freq - start_freq) * (t / duration)
-        # Volume decreases over time
-        volume = 0.2 * (1 - t / duration)
-        wave = 2048 * volume * math.sin(2 * math.pi * freq * t)
+        progress = t / duration
+        
+        # Smooth frequency transition using sine curve
+        freq_progress = 0.5 * (1 - math.cos(math.pi * progress))
+        freq = start_freq + (end_freq - start_freq) * freq_progress
+        
+        # Add harmonics for richer sound
+        fundamental = math.sin(2 * math.pi * freq * t)
+        harmonic2 = 0.2 * math.sin(2 * math.pi * freq * 2 * t)
+        
+        # Musical envelope - attack, sustain, decay
+        if progress < 0.1:  # Attack
+            envelope = progress / 0.1
+        elif progress < 0.7:  # Sustain
+            envelope = 1.0
+        else:  # Decay
+            envelope = (1.0 - progress) / 0.3
+        
+        wave = 2048 * 0.6 * (fundamental + harmonic2) * envelope
         arr.append([int(wave), int(wave)])
     
     return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
 
 def generate_level_complete_sound():
-    """Generate a victory fanfare - major chord progression"""
+    """Generate a melodic victory fanfare - classic video game melody"""
     sample_rate = 22050
-    duration = 1.0
+    duration = 1.5
     frames = int(duration * sample_rate)
     arr = []
     
-    # C major chord progression: C-E-G, then C-F-A, then C-E-G (higher)
-    chord1 = [262, 330, 392]  # C4-E4-G4
-    chord2 = [262, 349, 440]  # C4-F4-A4
-    chord3 = [523, 659, 784]  # C5-E5-G5
+    # Classic victory melody: C-C-C-C-G-G-G-G-A-A-A-A-C6
+    melody = [
+        (523, 0.1), (523, 0.1), (523, 0.1), (523, 0.1),  # C5 x4
+        (784, 0.1), (784, 0.1), (784, 0.1), (784, 0.1),  # G5 x4
+        (880, 0.15), (880, 0.15), (880, 0.15),           # A5 x3
+        (1047, 0.4)                                       # C6 (long)
+    ]
+    
+    current_time = 0
     
     for i in range(frames):
         t = i / sample_rate
         wave = 0
         
-        if t < 0.33:
-            # First chord
-            for freq in chord1:
-                wave += 1024 * 0.3 * math.sin(2 * math.pi * freq * t)
-        elif t < 0.66:
-            # Second chord
-            for freq in chord2:
-                wave += 1024 * 0.3 * math.sin(2 * math.pi * freq * t)
-        else:
-            # Third chord
-            for freq in chord3:
-                wave += 1024 * 0.3 * math.sin(2 * math.pi * freq * t)
+        # Find current note
+        note_time = 0
+        current_note = None
+        for note_freq, note_dur in melody:
+            if note_time <= t < note_time + note_dur:
+                current_note = (note_freq, t - note_time, note_dur)
+                break
+            note_time += note_dur
         
-        # Apply envelope
-        envelope = math.sin(math.pi * (t % 0.33) / 0.33)
-        wave *= envelope
+        if current_note:
+            freq, note_t, note_dur = current_note
+            
+            # Add harmonics for richer sound
+            fundamental = math.sin(2 * math.pi * freq * t)
+            harmonic2 = 0.3 * math.sin(2 * math.pi * freq * 2 * t)
+            harmonic3 = 0.1 * math.sin(2 * math.pi * freq * 3 * t)
+            
+            # Note envelope
+            note_progress = note_t / note_dur
+            if note_progress < 0.1:  # Attack
+                envelope = note_progress / 0.1
+            elif note_progress < 0.8:  # Sustain
+                envelope = 1.0
+            else:  # Release
+                envelope = (1.0 - note_progress) / 0.2
+            
+            wave = 2048 * 0.4 * (fundamental + harmonic2 + harmonic3) * envelope
         
         arr.append([int(wave), int(wave)])
     
     return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
 
 def generate_explosion_sound():
-    """Generate an explosion sound - noise burst with falling pitch"""
+    """Generate a melodic death sound - sad descending melody"""
     sample_rate = 22050
-    duration = 0.8
+    duration = 1.2
     frames = int(duration * sample_rate)
     arr = []
     
+    # Sad, melodic descending phrase - like a "wah wah wah" cartoon death
+    # Using a minor scale descent: G5 -> F5 -> Eb5 -> D5 -> C5
+    melody = [
+        (784, 0.2),   # G5
+        (698, 0.2),   # F5  
+        (622, 0.2),   # Eb5
+        (587, 0.3),   # D5
+        (523, 0.3)    # C5 (longer, final note)
+    ]
+    
     for i in range(frames):
         t = i / sample_rate
-        # Start with high frequency noise, drop to low rumble
-        freq = 800 * (1 - t / duration) + 50
-        # Add noise component
-        noise = random.uniform(-1, 1) * 0.5
-        # Add sine wave component
-        sine = math.sin(2 * math.pi * freq * t)
-        # Combine and apply envelope
-        volume = 0.8 * (1 - t / duration) ** 0.5
-        wave = 3072 * volume * (0.7 * noise + 0.3 * sine)
+        wave = 0
+        
+        # Find current note
+        note_time = 0
+        current_note = None
+        for note_freq, note_dur in melody:
+            if note_time <= t < note_time + note_dur:
+                current_note = (note_freq, t - note_time, note_dur)
+                break
+            note_time += note_dur
+        
+        if current_note:
+            freq, note_t, note_dur = current_note
+            note_progress = note_t / note_dur
+            
+            # Add vibrato for expressive effect
+            vibrato_freq = 5  # 5 Hz vibrato
+            vibrato_depth = 0.02  # 2% frequency modulation
+            freq_with_vibrato = freq * (1 + vibrato_depth * math.sin(2 * math.pi * vibrato_freq * t))
+            
+            # Generate rich harmonic content
+            fundamental = math.sin(2 * math.pi * freq_with_vibrato * t)
+            harmonic2 = 0.3 * math.sin(2 * math.pi * freq_with_vibrato * 2 * t)
+            harmonic3 = 0.1 * math.sin(2 * math.pi * freq_with_vibrato * 3 * t)
+            
+            # Sad, droopy envelope - starts strong, fades with a droop
+            if note_progress < 0.1:  # Quick attack
+                envelope = note_progress / 0.1
+            else:  # Sad, drooping decay
+                envelope = math.exp(-(note_progress - 0.1) * 2) * (1 - note_progress * 0.3)
+            
+            # Overall volume that decreases through the phrase
+            phrase_progress = t / duration
+            overall_volume = (1 - phrase_progress * 0.7)  # Fade to 30% by end
+            
+            wave = 2048 * 0.5 * (fundamental + harmonic2 + harmonic3) * envelope * overall_volume
+        
         arr.append([int(wave), int(wave)])
     
     return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
