@@ -301,6 +301,60 @@ except Exception as e:
 NIGHT_SKY = (25, 25, 50)  # Dark blue for night sky
 STAR_COLOR = (255, 255, 200)  # Yellowish white for stars
 
+def setup_display():
+    """Setup display mode (fullscreen or windowed)"""
+    global screen, SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN
+    
+    if FULLSCREEN:
+        try:
+            # Get the current display info for fullscreen
+            infoObject = pygame.display.Info()
+            SCREEN_WIDTH = infoObject.current_w
+            SCREEN_HEIGHT = infoObject.current_h
+            screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
+            print(f"Switched to fullscreen: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+        except pygame.error as e:
+            print(f"Fullscreen failed: {e}")
+            print("Falling back to windowed mode...")
+            FULLSCREEN = False
+            SCREEN_WIDTH = 1280
+            SCREEN_HEIGHT = 720
+            screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+            print(f"Windowed mode: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+    else:
+        SCREEN_WIDTH = 1280
+        SCREEN_HEIGHT = 720
+        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        print(f"Switched to windowed mode: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+
+def get_text_color(background_color):
+    """
+    Determine the best text color (black or white) based on background brightness.
+    Uses the luminance formula to calculate brightness.
+    """
+    if isinstance(background_color, tuple) and len(background_color) >= 3:
+        r, g, b = background_color[:3]
+    else:
+        # Default to black text if we can't determine background
+        return BLACK
+    
+    # Calculate luminance using the standard formula
+    # Luminance = 0.299*R + 0.587*G + 0.114*B
+    luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+    
+    # If background is bright (luminance > 0.5), use black text
+    # If background is dark (luminance <= 0.5), use white text
+    return BLACK if luminance > 0.5 else WHITE
+
+def get_current_background_color(level_data):
+    """Get the current background color based on level data"""
+    background_type = level_data.get('background_type', 'day')
+    
+    if background_type == 'night':
+        return NIGHT_SKY  # Dark blue for night time
+    else:
+        return (135, 206, 235)  # Sky blue for day time
+
 class Player:
     def __init__(self, x, y, color, player_num):
         self.rect = pygame.Rect(x, y, 40, 40)
@@ -1610,6 +1664,8 @@ def main():
         # Draw everything to screen
         level_data = level_manager.get_current_level_data()
         background_type = level_data.get('background_type', 'day')
+        background_color = get_current_background_color(level_data)
+        text_color = get_text_color(background_color)
         
         if background_type == 'night':
             screen.fill(NIGHT_SKY)  # Dark blue for night time
@@ -1655,16 +1711,16 @@ def main():
             sub_rect = sub_message.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 20))
             screen.blit(sub_message, sub_rect)
         
-        # Draw UI
+        # Draw UI with dynamic text color
         collected_coins = player1.collected_coins + player2.collected_coins
-        score_text = font_medium.render(f"Coins: {collected_coins}/{total_coins}", True, BLACK)
+        score_text = font_medium.render(f"Coins: {collected_coins}/{total_coins}", True, text_color)
         screen.blit(score_text, (20, 20))
         
-        # Display current world and level
-        level_text = font_medium.render(f"World: {level_manager.current_world} Level: {level_manager.current_level}", True, BLACK)
+        # Display current world and level with dynamic text color
+        level_text = font_medium.render(f"World: {level_manager.current_world} Level: {level_manager.current_level}", True, text_color)
         screen.blit(level_text, (20, 60))
         
-        # Draw instructions
+        # Draw instructions with dynamic text color
         instructions = [
             "Player 1: WASD to move",
             "Player 2: Arrow keys to move",
@@ -1675,7 +1731,7 @@ def main():
         ]
         
         for i, instruction in enumerate(instructions):
-            inst_text = font_small.render(instruction, True, BLACK)
+            inst_text = font_small.render(instruction, True, text_color)
             screen.blit(inst_text, (20, SCREEN_HEIGHT - 100 + i * 25))
         
         if game_complete:
