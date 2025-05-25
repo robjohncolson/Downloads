@@ -18,12 +18,23 @@ SCREEN_HEIGHT = infoObject.current_h
 FULLSCREEN = True
 
 if FULLSCREEN:
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
+    try:
+        # Try fullscreen first
+        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
+        print(f"Fullscreen mode: {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
+    except pygame.error as e:
+        print(f"Fullscreen failed: {e}")
+        print("Falling back to windowed mode...")
+        FULLSCREEN = False
+        SCREEN_WIDTH = 1280
+        SCREEN_HEIGHT = 720
+        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 else:
     SCREEN_WIDTH = 1280
     SCREEN_HEIGHT = 720
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 
+print(f"Display mode: {'Fullscreen' if FULLSCREEN else 'Windowed'} - {SCREEN_WIDTH}x{SCREEN_HEIGHT}")
 pygame.display.set_caption("Classroom Platformer")
 
 # Colors

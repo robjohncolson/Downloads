@@ -1,53 +1,54 @@
 import pygame
-import sys
 import json
-import os
 import math
+import os
 
-# Initialize Pygame
+# Initialize pygame
 pygame.init()
 
-# Set up the display
-SCREEN_WIDTH = 1280
-SCREEN_HEIGHT = 720
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("Platformer Level Editor")
+# Constants
+WINDOW_WIDTH = 1280
+WINDOW_HEIGHT = 720
+GRID_SIZE = 20
 
 # Colors
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
+GRAY = (128, 128, 128)
+LIGHT_GRAY = (200, 200, 200)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 100, 255)
 YELLOW = (255, 255, 0)
 PURPLE = (200, 0, 255)
-GRAY = (128, 128, 128)
 BROWN = (139, 69, 19)
-LIGHT_GRAY = (200, 200, 200)
-DARK_GRAY = (64, 64, 64)
-
-# Clock for controlling frame rate
-clock = pygame.time.Clock()
-FPS = 60
-
-# Fonts
-font_large = pygame.font.Font(None, 36)
-font_medium = pygame.font.Font(None, 24)
-font_small = pygame.font.Font(None, 18)
+ORANGE = (255, 150, 50)
+CYAN = (100, 255, 255)
 
 class LevelEditor:
     def __init__(self):
-        self.mode = "platform"  # Current editing mode: platform, coin, spike, goal, spawn
+        self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+        pygame.display.set_caption("Platformer Level Editor")
+        
+        self.clock = pygame.time.Clock()
+        self.font = pygame.font.Font(None, 24)
+        self.small_font = pygame.font.Font(None, 18)
+        
+        # Level data
         self.platforms = []
         self.coins = []
         self.spikes = []
-        self.goal = None
-        self.player_spawns = [{"x": 100, "y": 640}, {"x": 150, "y": 640}]
+        self.goal = {"x": WINDOW_WIDTH - 100, "y": WINDOW_HEIGHT - 120, "is_door": False}
+        self.player_spawns = [{"x": 100, "y": WINDOW_HEIGHT - 100}, {"x": 150, "y": WINDOW_HEIGHT - 100}]
+        
+        # Editor state
+        self.mode = "platform"  # "platform", "coin", "spike", "goal", "spawn"
+        self.selected_object = None
+        self.selected_spawn = 0
         
         # Drawing state
         self.drawing = False
         self.start_pos = None
-        self.current_rect = None
         
         # Level metadata
         self.world = 1
@@ -55,26 +56,42 @@ class LevelEditor:
         self.level_name = "New Level"
         self.background_type = "day"
         
-        # UI
-        self.selected_spawn = 0  # Which player spawn is selected (0 or 1)
-        
-        # Grid
-        self.grid_size = 20
-        self.show_grid = True
-        
         # Camera
         self.camera_x = 0
         self.camera_y = 0
         
-    def snap_to_grid(self, pos):
-        """Snap position to grid"""
-        x, y = pos
-        return (
-            round(x / self.grid_size) * self.grid_size,
-            round(y / self.grid_size) * self.grid_size
-        )
+        # Grid
+        self.show_grid = True
+        self.snap_to_grid = True
+        
+        print("=== Platformer Level Editor ===")
+        print("1-5: Switch modes (Platform/Coin/Spike/Goal/Spawn)")
+        print("Mouse: Left click - Place/Select, Right click - Delete")
+        print("WASD: Move camera, G: Toggle grid, Tab: Switch spawn point")
+        print("Ctrl+S: Save, Ctrl+L: Load, Ctrl+N: New level")
+        print("B: Toggle background (day/night)")
+        print("ESC: Exit")
+        print("===============================")
+    
+    def snap_position(self, pos):
+        if self.snap_to_grid:
+            x, y = pos
+            return (round(x / GRID_SIZE) * GRID_SIZE, round(y / GRID_SIZE) * GRID_SIZE)
+        return pos
     
     def handle_events(self):
+        keys = pygame.key.get_pressed()
+        
+        # Camera movement
+        if keys[pygame.K_w]:
+            self.camera_y -= 5
+        if keys[pygame.K_s]:
+            self.camera_y += 5
+        if keys[pygame.K_a]:
+            self.camera_x -= 5
+        if keys[pygame.K_d]:
+            self.camera_x += 5
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
@@ -84,73 +101,95 @@ class LevelEditor:
                     return False
                 elif event.key == pygame.K_1:
                     self.mode = "platform"
+                    print("Platform mode")
                 elif event.key == pygame.K_2:
                     self.mode = "coin"
+                    print("Coin mode")
                 elif event.key == pygame.K_3:
                     self.mode = "spike"
+                    print("Spike mode")
                 elif event.key == pygame.K_4:
                     self.mode = "goal"
+                    print("Goal mode")
                 elif event.key == pygame.K_5:
                     self.mode = "spawn"
+                    print("Spawn mode")
                 elif event.key == pygame.K_g:
                     self.show_grid = not self.show_grid
-                elif event.key == pygame.K_s and pygame.key.get_pressed()[pygame.K_LCTRL]:
-                    self.save_level()
-                elif event.key == pygame.K_l and pygame.key.get_pressed()[pygame.K_LCTRL]:
-                    self.load_level()
-                elif event.key == pygame.K_n and pygame.key.get_pressed()[pygame.K_LCTRL]:
-                    self.new_level()
-                elif event.key == pygame.K_DELETE:
-                    self.delete_at_mouse()
+                    print(f"Grid: {'ON' if self.show_grid else 'OFF'}")
                 elif event.key == pygame.K_TAB:
                     if self.mode == "spawn":
-                        self.selected_spawn = 1 - self.selected_spawn  # Toggle between 0 and 1
+                        self.selected_spawn = 1 - self.selected_spawn
+                        print(f"Selected spawn: {self.selected_spawn + 1}")
                 elif event.key == pygame.K_b:
                     self.background_type = "night" if self.background_type == "day" else "day"
+                    print(f"Background: {self.background_type}")
+                elif event.key == pygame.K_s and keys[pygame.K_LCTRL]:
+                    self.save_level()
+                elif event.key == pygame.K_l and keys[pygame.K_LCTRL]:
+                    self.load_level()
+                elif event.key == pygame.K_n and keys[pygame.K_LCTRL]:
+                    self.new_level()
             
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:  # Left click
-                    mouse_pos = pygame.mouse.get_pos()
-                    grid_pos = self.snap_to_grid(mouse_pos)
-                    
-                    if self.mode == "platform":
-                        self.drawing = True
-                        self.start_pos = grid_pos
-                    elif self.mode == "coin":
-                        self.add_coin(grid_pos)
-                    elif self.mode == "spike":
-                        self.drawing = True
-                        self.start_pos = grid_pos
-                    elif self.mode == "goal":
-                        self.set_goal(grid_pos)
-                    elif self.mode == "spawn":
-                        self.set_spawn(grid_pos)
+                mouse_pos = pygame.mouse.get_pos()
+                world_pos = (mouse_pos[0] + self.camera_x, mouse_pos[1] + self.camera_y)
                 
-                elif event.button == 3:  # Right click - delete
-                    self.delete_at_mouse()
+                if event.button == 1:  # Left click
+                    self.handle_left_click(world_pos)
+                elif event.button == 3:  # Right click
+                    self.handle_right_click(world_pos)
             
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1 and self.drawing:
                     mouse_pos = pygame.mouse.get_pos()
-                    grid_pos = self.snap_to_grid(mouse_pos)
-                    
-                    if self.mode == "platform":
-                        self.add_platform(self.start_pos, grid_pos)
-                    elif self.mode == "spike":
-                        self.add_spike(self.start_pos, grid_pos)
-                    
-                    self.drawing = False
-                    self.start_pos = None
+                    world_pos = (mouse_pos[0] + self.camera_x, mouse_pos[1] + self.camera_y)
+                    self.finish_drawing(world_pos)
+        
+        return True
+    
+    def handle_left_click(self, world_pos):
+        pos = self.snap_position(world_pos)
+        
+        if self.mode == "platform":
+            self.drawing = True
+            self.start_pos = pos
+        elif self.mode == "coin":
+            self.add_coin(pos)
+        elif self.mode == "spike":
+            self.drawing = True
+            self.start_pos = pos
+        elif self.mode == "goal":
+            self.set_goal(pos)
+        elif self.mode == "spawn":
+            self.set_spawn(pos)
+    
+    def handle_right_click(self, world_pos):
+        # Delete object at position
+        self.delete_at_position(world_pos)
+    
+    def finish_drawing(self, world_pos):
+        if not self.drawing or not self.start_pos:
+            return
+        
+        end_pos = self.snap_position(world_pos)
+        
+        if self.mode == "platform":
+            self.add_platform(self.start_pos, end_pos)
+        elif self.mode == "spike":
+            self.add_spike(self.start_pos, end_pos)
+        
+        self.drawing = False
+        self.start_pos = None
     
     def add_platform(self, start_pos, end_pos):
-        """Add a platform from start to end position"""
         x1, y1 = start_pos
         x2, y2 = end_pos
         
         x = min(x1, x2)
         y = min(y1, y2)
-        width = abs(x2 - x1) + self.grid_size
-        height = abs(y2 - y1) + self.grid_size
+        width = abs(x2 - x1) + GRID_SIZE
+        height = abs(y2 - y1) + GRID_SIZE
         
         if width > 0 and height > 0:
             self.platforms.append({
@@ -160,21 +199,21 @@ class LevelEditor:
                 "height": height,
                 "color": [139, 69, 19]
             })
+            print(f"Added platform at ({x}, {y}) size {width}x{height}")
     
     def add_coin(self, pos):
-        """Add a coin at position"""
         x, y = pos
         self.coins.append({"x": x, "y": y})
+        print(f"Added coin at ({x}, {y})")
     
     def add_spike(self, start_pos, end_pos):
-        """Add a spike from start to end position"""
         x1, y1 = start_pos
         x2, y2 = end_pos
         
         x = min(x1, x2)
         y = min(y1, y2)
-        width = abs(x2 - x1) + self.grid_size
-        height = abs(y2 - y1) + self.grid_size
+        width = abs(x2 - x1) + GRID_SIZE
+        height = abs(y2 - y1) + GRID_SIZE
         
         if width > 0 and height > 0:
             self.spikes.append({
@@ -183,53 +222,50 @@ class LevelEditor:
                 "width": width,
                 "height": height
             })
+            print(f"Added spike at ({x}, {y}) size {width}x{height}")
     
     def set_goal(self, pos):
-        """Set goal position"""
         x, y = pos
         self.goal = {"x": x, "y": y, "is_door": False}
+        print(f"Set goal at ({x}, {y})")
     
     def set_spawn(self, pos):
-        """Set player spawn position"""
         x, y = pos
         self.player_spawns[self.selected_spawn] = {"x": x, "y": y}
+        print(f"Set spawn {self.selected_spawn + 1} at ({x}, {y})")
     
-    def delete_at_mouse(self):
-        """Delete object at mouse position"""
-        mouse_pos = pygame.mouse.get_pos()
-        x, y = mouse_pos
+    def delete_at_position(self, world_pos):
+        x, y = world_pos
         
         # Check platforms
-        for platform in self.platforms[:]:
-            if (platform["x"] <= x <= platform["x"] + platform["width"] and
-                platform["y"] <= y <= platform["y"] + platform["height"]):
-                self.platforms.remove(platform)
+        for i, platform in enumerate(self.platforms):
+            px, py, pw, ph = platform["x"], platform["y"], platform["width"], platform["height"]
+            if px <= x <= px + pw and py <= y <= py + ph:
+                del self.platforms[i]
+                print("Deleted platform")
                 return
         
         # Check coins
-        for coin in self.coins[:]:
-            if (coin["x"] <= x <= coin["x"] + 30 and
-                coin["y"] <= y <= coin["y"] + 30):
-                self.coins.remove(coin)
+        for i, coin in enumerate(self.coins):
+            cx, cy = coin["x"], coin["y"]
+            if abs(x - cx) < 30 and abs(y - cy) < 30:
+                del self.coins[i]
+                print("Deleted coin")
                 return
         
         # Check spikes
-        for spike in self.spikes[:]:
-            if (spike["x"] <= x <= spike["x"] + spike["width"] and
-                spike["y"] <= y <= spike["y"] + spike["height"]):
-                self.spikes.remove(spike)
+        for i, spike in enumerate(self.spikes):
+            sx, sy, sw, sh = spike["x"], spike["y"], spike["width"], spike["height"]
+            if sx <= x <= sx + sw and sy <= y <= sy + sh:
+                del self.spikes[i]
+                print("Deleted spike")
                 return
-        
-        # Check goal
-        if self.goal:
-            if (self.goal["x"] <= x <= self.goal["x"] + 60 and
-                self.goal["y"] <= y <= self.goal["y"] + 80):
-                self.goal = None
     
     def save_level(self):
-        """Save current level to JSON file"""
-        if not os.path.exists("levels"):
-            os.makedirs("levels")
+        filename = f"levels/world{self.world}_level{self.level}.json"
+        
+        # Create levels directory if it doesn't exist
+        os.makedirs("levels", exist_ok=True)
         
         level_data = {
             "world": self.world,
@@ -239,21 +275,20 @@ class LevelEditor:
             "platforms": self.platforms,
             "coins": self.coins,
             "spikes": self.spikes,
-            "goal": self.goal or {"x": SCREEN_WIDTH - 100, "y": SCREEN_HEIGHT - 120, "is_door": False},
+            "goal": self.goal,
             "player_spawns": self.player_spawns
         }
         
-        filename = f"levels/world{self.world}_level{self.level}.json"
         try:
             with open(filename, 'w') as f:
                 json.dump(level_data, f, indent=2)
-            print(f"Level saved as {filename}")
+            print(f"Saved: {filename}")
         except Exception as e:
-            print(f"Error saving level: {e}")
+            print(f"Save error: {e}")
     
     def load_level(self):
-        """Load level from JSON file"""
         filename = f"levels/world{self.world}_level{self.level}.json"
+        
         try:
             with open(filename, 'r') as f:
                 level_data = json.load(f)
@@ -265,170 +300,136 @@ class LevelEditor:
             self.platforms = level_data.get("platforms", [])
             self.coins = level_data.get("coins", [])
             self.spikes = level_data.get("spikes", [])
-            self.goal = level_data.get("goal")
-            self.player_spawns = level_data.get("player_spawns", [{"x": 100, "y": 640}, {"x": 150, "y": 640}])
+            self.goal = level_data.get("goal", {"x": WINDOW_WIDTH - 100, "y": WINDOW_HEIGHT - 120, "is_door": False})
+            self.player_spawns = level_data.get("player_spawns", [{"x": 100, "y": WINDOW_HEIGHT - 100}, {"x": 150, "y": WINDOW_HEIGHT - 100}])
             
-            print(f"Level loaded from {filename}")
+            print(f"Loaded: {filename}")
+            print(f"Platforms: {len(self.platforms)}, Coins: {len(self.coins)}, Spikes: {len(self.spikes)}")
+            
+        except FileNotFoundError:
+            print(f"File not found: {filename}")
         except Exception as e:
-            print(f"Error loading level: {e}")
+            print(f"Load error: {e}")
     
     def new_level(self):
-        """Create a new empty level"""
         self.platforms = []
         self.coins = []
         self.spikes = []
-        self.goal = None
-        self.player_spawns = [{"x": 100, "y": 640}, {"x": 150, "y": 640}]
+        self.goal = {"x": WINDOW_WIDTH - 100, "y": WINDOW_HEIGHT - 120, "is_door": False}
+        self.player_spawns = [{"x": 100, "y": WINDOW_HEIGHT - 100}, {"x": 150, "y": WINDOW_HEIGHT - 100}]
         self.level_name = "New Level"
-        print("New level created")
+        self.background_type = "day"
+        print("Created new level")
     
-    def draw_grid(self, screen):
-        """Draw grid lines"""
+    def draw_grid(self):
         if not self.show_grid:
             return
         
-        for x in range(0, SCREEN_WIDTH, self.grid_size):
-            pygame.draw.line(screen, LIGHT_GRAY, (x, 0), (x, SCREEN_HEIGHT))
-        for y in range(0, SCREEN_HEIGHT, self.grid_size):
-            pygame.draw.line(screen, LIGHT_GRAY, (0, y), (SCREEN_WIDTH, y))
+        # Calculate visible grid bounds
+        start_x = (self.camera_x // GRID_SIZE) * GRID_SIZE
+        start_y = (self.camera_y // GRID_SIZE) * GRID_SIZE
+        end_x = start_x + WINDOW_WIDTH + GRID_SIZE
+        end_y = start_y + WINDOW_HEIGHT + GRID_SIZE
+        
+        # Draw vertical lines
+        for x in range(int(start_x), int(end_x), GRID_SIZE):
+            screen_x = x - self.camera_x
+            if 0 <= screen_x <= WINDOW_WIDTH:
+                color = GRAY if (x // GRID_SIZE) % 5 == 0 else LIGHT_GRAY
+                pygame.draw.line(self.screen, color, (screen_x, 0), (screen_x, WINDOW_HEIGHT))
+        
+        # Draw horizontal lines
+        for y in range(int(start_y), int(end_y), GRID_SIZE):
+            screen_y = y - self.camera_y
+            if 0 <= screen_y <= WINDOW_HEIGHT:
+                color = GRAY if (y // GRID_SIZE) % 5 == 0 else LIGHT_GRAY
+                pygame.draw.line(self.screen, color, (0, screen_y), (WINDOW_WIDTH, screen_y))
     
-    def draw_objects(self, screen):
-        """Draw all level objects"""
+    def world_to_screen(self, world_pos):
+        return (world_pos[0] - self.camera_x, world_pos[1] - self.camera_y)
+    
+    def draw_objects(self):
         # Draw platforms
         for platform in self.platforms:
-            color = tuple(platform["color"])
-            rect = pygame.Rect(platform["x"], platform["y"], platform["width"], platform["height"])
-            pygame.draw.rect(screen, color, rect)
-            pygame.draw.rect(screen, BLACK, rect, 2)
+            x, y = self.world_to_screen((platform["x"], platform["y"]))
+            rect = pygame.Rect(x, y, platform["width"], platform["height"])
+            pygame.draw.rect(self.screen, BROWN, rect)
+            pygame.draw.rect(self.screen, BLACK, rect, 2)
         
         # Draw coins
         for coin in self.coins:
-            center = (coin["x"] + 15, coin["y"] + 15)
-            pygame.draw.circle(screen, YELLOW, center, 15)
-            pygame.draw.circle(screen, BLACK, center, 15, 2)
+            x, y = self.world_to_screen((coin["x"], coin["y"]))
+            pygame.draw.circle(self.screen, YELLOW, (int(x), int(y)), 15)
+            pygame.draw.circle(self.screen, BLACK, (int(x), int(y)), 15, 2)
         
         # Draw spikes
         for spike in self.spikes:
-            rect = pygame.Rect(spike["x"], spike["y"], spike["width"], spike["height"])
-            pygame.draw.rect(screen, GRAY, rect)
-            pygame.draw.rect(screen, BLACK, rect, 2)
-            
-            # Draw spike triangles
-            num_spikes = spike["width"] // 10
-            for i in range(num_spikes):
-                spike_x = spike["x"] + i * 10 + 5
-                pygame.draw.polygon(screen, GRAY, [
-                    (spike_x - 5, spike["y"] + spike["height"]),
-                    (spike_x, spike["y"]),
-                    (spike_x + 5, spike["y"] + spike["height"])
-                ])
+            x, y = self.world_to_screen((spike["x"], spike["y"]))
+            rect = pygame.Rect(x, y, spike["width"], spike["height"])
+            pygame.draw.rect(self.screen, RED, rect)
+            pygame.draw.rect(self.screen, BLACK, rect, 2)
         
         # Draw goal
         if self.goal:
-            rect = pygame.Rect(self.goal["x"], self.goal["y"], 60, 80)
-            pygame.draw.rect(screen, GREEN, rect)
-            pygame.draw.rect(screen, BLACK, rect, 2)
-            
-            # Draw flag
-            pygame.draw.polygon(screen, GREEN, [
-                (self.goal["x"] + 35, self.goal["y"]),
-                (self.goal["x"] + 60, self.goal["y"] + 20),
-                (self.goal["x"] + 35, self.goal["y"] + 40)
-            ])
+            x, y = self.world_to_screen((self.goal["x"], self.goal["y"]))
+            rect = pygame.Rect(x, y, 60, 80)
+            pygame.draw.rect(self.screen, GREEN, rect)
+            pygame.draw.rect(self.screen, BLACK, rect, 2)
         
         # Draw player spawns
         for i, spawn in enumerate(self.player_spawns):
+            x, y = self.world_to_screen((spawn["x"], spawn["y"]))
             color = BLUE if i == 0 else RED
-            rect = pygame.Rect(spawn["x"], spawn["y"], 40, 40)
-            pygame.draw.rect(screen, color, rect)
-            pygame.draw.rect(screen, BLACK, rect, 2)
-            
-            # Highlight selected spawn
             if i == self.selected_spawn and self.mode == "spawn":
-                pygame.draw.rect(screen, WHITE, rect, 4)
+                pygame.draw.circle(self.screen, YELLOW, (int(x), int(y)), 25, 3)
+            pygame.draw.circle(self.screen, color, (int(x), int(y)), 20)
+            pygame.draw.circle(self.screen, BLACK, (int(x), int(y)), 20, 2)
     
-    def draw_current_drawing(self, screen):
-        """Draw the object currently being drawn"""
-        if not self.drawing or not self.start_pos:
-            return
-        
-        mouse_pos = pygame.mouse.get_pos()
-        grid_pos = self.snap_to_grid(mouse_pos)
-        
-        x1, y1 = self.start_pos
-        x2, y2 = grid_pos
-        
-        x = min(x1, x2)
-        y = min(y1, y2)
-        width = abs(x2 - x1) + self.grid_size
-        height = abs(y2 - y1) + self.grid_size
-        
-        rect = pygame.Rect(x, y, width, height)
-        
-        if self.mode == "platform":
-            pygame.draw.rect(screen, BROWN, rect)
-            pygame.draw.rect(screen, BLACK, rect, 2)
-        elif self.mode == "spike":
-            pygame.draw.rect(screen, GRAY, rect)
-            pygame.draw.rect(screen, BLACK, rect, 2)
+    def draw_current_drawing(self):
+        if self.drawing and self.start_pos:
+            mouse_pos = pygame.mouse.get_pos()
+            world_pos = (mouse_pos[0] + self.camera_x, mouse_pos[1] + self.camera_y)
+            end_pos = self.snap_position(world_pos)
+            
+            start_screen = self.world_to_screen(self.start_pos)
+            end_screen = self.world_to_screen(end_pos)
+            
+            x = min(start_screen[0], end_screen[0])
+            y = min(start_screen[1], end_screen[1])
+            width = abs(end_screen[0] - start_screen[0])
+            height = abs(end_screen[1] - start_screen[1])
+            
+            color = BROWN if self.mode == "platform" else RED
+            pygame.draw.rect(self.screen, color, (x, y, width, height), 2)
     
-    def draw_ui(self, screen):
-        """Draw user interface"""
-        # Background for UI
-        ui_rect = pygame.Rect(0, 0, SCREEN_WIDTH, 100)
-        pygame.draw.rect(screen, DARK_GRAY, ui_rect)
-        pygame.draw.rect(screen, BLACK, ui_rect, 2)
+    def draw_ui(self):
+        # Background panel
+        ui_rect = pygame.Rect(10, 10, 300, 200)
+        pygame.draw.rect(self.screen, (0, 0, 0, 128), ui_rect)
+        pygame.draw.rect(self.screen, WHITE, ui_rect, 2)
         
-        # Mode indicators
-        modes = [
-            ("1: Platform", "platform", BROWN),
-            ("2: Coin", "coin", YELLOW),
-            ("3: Spike", "spike", GRAY),
-            ("4: Goal", "goal", GREEN),
-            ("5: Spawn", "spawn", BLUE)
+        # UI text
+        y_pos = 20
+        texts = [
+            f"Mode: {self.mode.title()}",
+            f"World: {self.world} Level: {self.level}",
+            f"Background: {self.background_type}",
+            f"Platforms: {len(self.platforms)}",
+            f"Coins: {len(self.coins)}",
+            f"Spikes: {len(self.spikes)}",
+            f"Grid: {'ON' if self.show_grid else 'OFF'}",
+            f"Camera: ({self.camera_x}, {self.camera_y})"
         ]
         
-        x_offset = 10
-        for text, mode, color in modes:
-            text_color = WHITE if self.mode == mode else LIGHT_GRAY
-            text_surface = font_medium.render(text, True, text_color)
-            screen.blit(text_surface, (x_offset, 10))
-            x_offset += text_surface.get_width() + 20
-        
-        # Level info
-        info_text = f"World: {self.world} Level: {self.level} | {self.level_name} | BG: {self.background_type}"
-        info_surface = font_medium.render(info_text, True, WHITE)
-        screen.blit(info_surface, (10, 35))
-        
-        # Instructions
-        instructions = [
-            "Ctrl+S: Save | Ctrl+L: Load | Ctrl+N: New | Del/RClick: Delete",
-            "G: Toggle Grid | B: Toggle Background | Tab: Switch Spawn (in spawn mode)"
-        ]
-        
-        for i, instruction in enumerate(instructions):
-            inst_surface = font_small.render(instruction, True, LIGHT_GRAY)
-            screen.blit(inst_surface, (10, 60 + i * 20))
-        
-        # Current mode info
-        mode_info = ""
         if self.mode == "spawn":
-            mode_info = f"Selected spawn: Player {self.selected_spawn + 1}"
-        elif self.mode == "platform":
-            mode_info = "Click and drag to create platforms"
-        elif self.mode == "coin":
-            mode_info = "Click to place coins"
-        elif self.mode == "spike":
-            mode_info = "Click and drag to create spikes"
-        elif self.mode == "goal":
-            mode_info = "Click to place goal"
+            texts.append(f"Selected Spawn: {self.selected_spawn + 1}")
         
-        if mode_info:
-            mode_surface = font_small.render(mode_info, True, YELLOW)
-            screen.blit(mode_surface, (SCREEN_WIDTH - mode_surface.get_width() - 10, 10))
+        for text in texts:
+            surface = self.font.render(text, True, WHITE)
+            self.screen.blit(surface, (20, y_pos))
+            y_pos += 20
     
     def run(self):
-        """Main editor loop"""
         running = True
         
         while running:
@@ -436,25 +437,32 @@ class LevelEditor:
             
             # Clear screen
             if self.background_type == "night":
-                screen.fill((25, 25, 50))  # Night sky
+                self.screen.fill((25, 25, 50))
             else:
-                screen.fill((135, 206, 235))  # Day sky
+                self.screen.fill((135, 206, 235))
             
             # Draw everything
-            self.draw_grid(screen)
-            self.draw_objects(screen)
-            self.draw_current_drawing(screen)
-            self.draw_ui(screen)
+            self.draw_grid()
+            self.draw_objects()
+            self.draw_current_drawing()
+            self.draw_ui()
             
+            # Update display
             pygame.display.flip()
-            clock.tick(FPS)
+            self.clock.tick(60)
         
         pygame.quit()
-        sys.exit()
 
 def main():
-    editor = LevelEditor()
-    editor.run()
+    try:
+        print("Starting Level Editor...")
+        editor = LevelEditor()
+        editor.run()
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
+        input("Press Enter to exit...")
 
 if __name__ == "__main__":
     main() 

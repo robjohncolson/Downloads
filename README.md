@@ -5,7 +5,7 @@ This platformer game now supports external JSON level files and includes a power
 ## 🎮 Running the Game
 
 ```bash
-python "pygame_smartboard_starter (1).py"
+python3 "pygame_smartboard_starter (1).py"
 ```
 
 The game will automatically scan the `levels/` directory for JSON level files and load them dynamically.
@@ -14,7 +14,7 @@ The game will automatically scan the `levels/` directory for JSON level files an
 
 ### Running the Editor
 ```bash
-python level_editor.py
+python3 level_editor.py
 ```
 
 ### Editor Controls
@@ -120,7 +120,7 @@ Levels are stored as JSON files in the `levels/` directory with the naming conve
 ## 🎯 Creating Custom Levels
 
 ### Method 1: Using the Level Editor (Recommended)
-1. Run `python level_editor.py`
+1. Run `python3 level_editor.py`
 2. Use the number keys to switch between modes
 3. Click and drag to create platforms and spikes
 4. Click to place coins, goals, and spawn points
