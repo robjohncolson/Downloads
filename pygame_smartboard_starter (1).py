@@ -242,6 +242,7 @@ class Player:
         self.death_center_x = 0  # Target x position for center movement
         self.death_center_y = 0  # Target y position for center movement
         self.surprised_face = False  # For the "OH!" expression
+        self.eye_direction = 0  # -1 for left, 0 for center, 1 for right
         
     def update(self, platforms, coins, keys_pressed, other_players=None):
         # If player is in dying animation, update particles and return
@@ -264,10 +265,13 @@ class Player:
         if self.player_num == 1:
             if keys_pressed[pygame.K_a]:
                 self.vel_x = -MOVE_SPEED
+                self.eye_direction = -1  # Look left
             elif keys_pressed[pygame.K_d]:
                 self.vel_x = MOVE_SPEED
+                self.eye_direction = 1   # Look right
             else:
                 self.vel_x *= FRICTION
+                self.eye_direction = 0   # Look center when not moving
                 
             # Check if player can jump
             can_normal_jump = self.on_ground or self.standing_on_player
@@ -289,10 +293,13 @@ class Player:
         elif self.player_num == 2:
             if keys_pressed[pygame.K_LEFT]:
                 self.vel_x = -MOVE_SPEED
+                self.eye_direction = -1  # Look left
             elif keys_pressed[pygame.K_RIGHT]:
                 self.vel_x = MOVE_SPEED
+                self.eye_direction = 1   # Look right
             else:
                 self.vel_x *= FRICTION
+                self.eye_direction = 0   # Look center when not moving
                 
             # Check if player can jump
             can_normal_jump = self.on_ground or self.standing_on_player
@@ -451,12 +458,12 @@ class Player:
                 self.death_phase = 2  # Growth phase
         
         elif self.death_phase == 2:  # Growth phase
-            # Calculate growth factor (from 1x to 20x over 30 frames)
+            # Calculate growth factor (from 1x to 3x over 30 frames) - much smaller expansion
             remaining_growth_time = max(0, self.death_timer - 15)  # Last 15 frames reserved for explosion
             if remaining_growth_time > 0:
-                # Grow from 1x to 20x size
+                # Grow from 1x to 3x size (much more reasonable)
                 growth_progress = (30 - remaining_growth_time) / 30
-                growth_factor = 1 + 19 * growth_progress  # 1 to 20
+                growth_factor = 1 + 2 * growth_progress  # 1 to 3 instead of 1 to 20
                 
                 # Store original center for consistent positioning
                 center_x = self.rect.centerx
@@ -470,15 +477,15 @@ class Player:
                 self.rect.centerx = center_x
                 self.rect.centery = center_y
                 
-                # If we've reached maximum size, create explosion
-                if growth_factor >= 19.5:
+                # If we've reached near maximum size, create explosion
+                if growth_factor >= 2.8:
                     # Create explosion particles
-                    for _ in range(150):  # Even more particles for bigger explosion
+                    for _ in range(80):  # Fewer particles for smaller explosion
                         particle = ExplosionParticle(self.rect.centerx, self.rect.centery)
-                        # Bigger explosion
-                        particle.size = random.randint(5, 15)  # Larger particles
-                        particle.vel_x = random.uniform(-15, 15)  # Faster particles
-                        particle.vel_y = random.uniform(-15, 15)  # Particles in all directions
+                        # Smaller explosion
+                        particle.size = random.randint(3, 8)  # Smaller particles
+                        particle.vel_x = random.uniform(-10, 10)  # Moderate speed particles
+                        particle.vel_y = random.uniform(-10, 10)  # Particles in all directions
                         self.death_particles.append(particle)
                     
                     # Play explosion sound again for the final explosion
@@ -555,10 +562,8 @@ class Player:
                 mouth_size = int(8 * scale_factor)
                 mouth_y = self.rect.top + int(28 * scale_factor)
                 
-                # Draw a filled black circle for the mouth
+                # Draw a filled black circle for the mouth - keep it black inside
                 pygame.draw.circle(screen, BLACK, (self.rect.centerx, mouth_y), mouth_size)
-                # Draw a smaller white circle inside to create the "O" shape
-                pygame.draw.circle(screen, self.color, (self.rect.centerx, mouth_y), max(1, mouth_size - int(2 * scale_factor)))
             
             # Draw explosion particles
             for particle in self.death_particles:
@@ -569,13 +574,28 @@ class Player:
             
             # Draw eyes
             eye_size = 8
-            pygame.draw.circle(screen, WHITE, (self.rect.left + 12, self.rect.top + 15), eye_size)
-            pygame.draw.circle(screen, WHITE, (self.rect.right - 12, self.rect.top + 15), eye_size)
+            left_eye_center = (self.rect.left + 12, self.rect.top + 15)
+            right_eye_center = (self.rect.right - 12, self.rect.top + 15)
+            pygame.draw.circle(screen, WHITE, left_eye_center, eye_size)
+            pygame.draw.circle(screen, WHITE, right_eye_center, eye_size)
             
-            # Draw pupils
+            # Draw pupils with directional movement
             pupil_size = 4
-            pygame.draw.circle(screen, BLACK, (self.rect.left + 12, self.rect.top + 15), pupil_size)
-            pygame.draw.circle(screen, BLACK, (self.rect.right - 12, self.rect.top + 15), pupil_size)
+            pupil_offset = 2  # How far pupils move from center
+            
+            # Calculate pupil positions based on eye direction
+            if self.eye_direction == -1:  # Looking left
+                left_pupil_pos = (left_eye_center[0] - pupil_offset, left_eye_center[1])
+                right_pupil_pos = (right_eye_center[0] - pupil_offset, right_eye_center[1])
+            elif self.eye_direction == 1:  # Looking right
+                left_pupil_pos = (left_eye_center[0] + pupil_offset, left_eye_center[1])
+                right_pupil_pos = (right_eye_center[0] + pupil_offset, right_eye_center[1])
+            else:  # Looking center
+                left_pupil_pos = left_eye_center
+                right_pupil_pos = right_eye_center
+            
+            pygame.draw.circle(screen, BLACK, left_pupil_pos, pupil_size)
+            pygame.draw.circle(screen, BLACK, right_pupil_pos, pupil_size)
             
             # Draw mouth - happy face if all coins collected, normal face otherwise
             mouth_y = self.rect.top + 28
