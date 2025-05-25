@@ -64,6 +64,10 @@ class LevelEditor:
         self.show_grid = True
         self.snap_to_grid = True
         
+        # Browser state
+        self.show_browser = False
+        self.browser = None
+        
         print("=== Platformer Level Editor ===")
         print("1-5: Switch modes (Platform/Coin/Spike/Goal/Spawn)")
         print("Mouse: Left click - Place/Select, Right click - Delete")
@@ -80,6 +84,14 @@ class LevelEditor:
         return pos
     
     def handle_events(self):
+        # Handle browser events first if browser is open
+        if self.show_browser and self.browser:
+            for event in pygame.event.get():
+                if not self.browser.handle_events(event):
+                    self.show_browser = False
+                    self.browser = None
+            return True
+        
         keys = pygame.key.get_pressed()
         
         # Camera movement
@@ -125,9 +137,17 @@ class LevelEditor:
                     self.background_type = "night" if self.background_type == "day" else "day"
                     print(f"Background: {self.background_type}")
                 elif event.key == pygame.K_s and keys[pygame.K_LCTRL]:
-                    self.save_level()
+                    # Open save browser
+                    self.browser = LevelBrowser(self)
+                    self.browser.mode = "save"
+                    self.show_browser = True
+                    print("Opening save browser...")
                 elif event.key == pygame.K_l and keys[pygame.K_LCTRL]:
-                    self.load_level()
+                    # Open load browser
+                    self.browser = LevelBrowser(self)
+                    self.browser.mode = "load"
+                    self.show_browser = True
+                    print("Opening load browser...")
                 elif event.key == pygame.K_n and keys[pygame.K_LCTRL]:
                     self.new_level()
             
@@ -319,6 +339,8 @@ class LevelEditor:
         self.player_spawns = [{"x": 100, "y": WINDOW_HEIGHT - 100}, {"x": 150, "y": WINDOW_HEIGHT - 100}]
         self.level_name = "New Level"
         self.background_type = "day"
+        self.world = 1
+        self.level = 1
         print("Created new level")
     
     def draw_grid(self):
@@ -404,7 +426,7 @@ class LevelEditor:
     
     def draw_ui(self):
         # Background panel
-        ui_rect = pygame.Rect(10, 10, 300, 200)
+        ui_rect = pygame.Rect(10, 10, 350, 220)
         pygame.draw.rect(self.screen, (0, 0, 0, 128), ui_rect)
         pygame.draw.rect(self.screen, WHITE, ui_rect, 2)
         
@@ -412,6 +434,7 @@ class LevelEditor:
         y_pos = 20
         texts = [
             f"Mode: {self.mode.title()}",
+            f"Level: {self.level_name}",
             f"World: {self.world} Level: {self.level}",
             f"Background: {self.background_type}",
             f"Platforms: {len(self.platforms)}",
@@ -446,6 +469,10 @@ class LevelEditor:
             self.draw_objects()
             self.draw_current_drawing()
             self.draw_ui()
+            
+            # Draw browser overlay if open
+            if self.show_browser and self.browser:
+                self.browser.draw(self.screen)
             
             # Update display
             pygame.display.flip()
