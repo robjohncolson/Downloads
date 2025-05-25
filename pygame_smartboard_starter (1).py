@@ -51,23 +51,153 @@ JUMP_STRENGTH = -15
 MOVE_SPEED = 5
 FRICTION = 0.9
 
-# Load sounds
+# Synthesized sound generation functions
+def generate_tone(frequency, duration, sample_rate=22050, volume=0.5):
+    """Generate a sine wave tone"""
+    frames = int(duration * sample_rate)
+    arr = []
+    for i in range(frames):
+        wave = 4096 * volume * math.sin(2 * math.pi * frequency * i / sample_rate)
+        arr.append([int(wave), int(wave)])
+    return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
+
+def generate_coin_sound():
+    """Generate a pleasant coin collection sound - ascending notes"""
+    sample_rate = 22050
+    duration = 0.3
+    frames = int(duration * sample_rate)
+    arr = []
+    
+    # Two ascending tones
+    freq1, freq2 = 523, 659  # C5 to E5
+    
+    for i in range(frames):
+        t = i / sample_rate
+        # First tone fades out, second tone fades in
+        if t < 0.15:
+            wave1 = 2048 * 0.3 * math.sin(2 * math.pi * freq1 * t) * (1 - t/0.15)
+            wave2 = 2048 * 0.3 * math.sin(2 * math.pi * freq2 * t) * (t/0.15)
+        else:
+            wave1 = 0
+            wave2 = 2048 * 0.3 * math.sin(2 * math.pi * freq2 * t) * ((0.3-t)/0.15)
+        
+        wave = wave1 + wave2
+        arr.append([int(wave), int(wave)])
+    
+    return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
+
+def generate_jump_sound():
+    """Generate a quick jump sound - rising pitch"""
+    sample_rate = 22050
+    duration = 0.2
+    frames = int(duration * sample_rate)
+    arr = []
+    
+    start_freq, end_freq = 200, 400
+    
+    for i in range(frames):
+        t = i / sample_rate
+        # Frequency rises over time
+        freq = start_freq + (end_freq - start_freq) * (t / duration)
+        # Volume decreases over time
+        volume = 0.2 * (1 - t / duration)
+        wave = 2048 * volume * math.sin(2 * math.pi * freq * t)
+        arr.append([int(wave), int(wave)])
+    
+    return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
+
+def generate_level_complete_sound():
+    """Generate a victory fanfare - major chord progression"""
+    sample_rate = 22050
+    duration = 1.0
+    frames = int(duration * sample_rate)
+    arr = []
+    
+    # C major chord progression: C-E-G, then C-F-A, then C-E-G (higher)
+    chord1 = [262, 330, 392]  # C4-E4-G4
+    chord2 = [262, 349, 440]  # C4-F4-A4
+    chord3 = [523, 659, 784]  # C5-E5-G5
+    
+    for i in range(frames):
+        t = i / sample_rate
+        wave = 0
+        
+        if t < 0.33:
+            # First chord
+            for freq in chord1:
+                wave += 1024 * 0.3 * math.sin(2 * math.pi * freq * t)
+        elif t < 0.66:
+            # Second chord
+            for freq in chord2:
+                wave += 1024 * 0.3 * math.sin(2 * math.pi * freq * t)
+        else:
+            # Third chord
+            for freq in chord3:
+                wave += 1024 * 0.3 * math.sin(2 * math.pi * freq * t)
+        
+        # Apply envelope
+        envelope = math.sin(math.pi * (t % 0.33) / 0.33)
+        wave *= envelope
+        
+        arr.append([int(wave), int(wave)])
+    
+    return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
+
+def generate_explosion_sound():
+    """Generate an explosion sound - noise burst with falling pitch"""
+    sample_rate = 22050
+    duration = 0.8
+    frames = int(duration * sample_rate)
+    arr = []
+    
+    for i in range(frames):
+        t = i / sample_rate
+        # Start with high frequency noise, drop to low rumble
+        freq = 800 * (1 - t / duration) + 50
+        # Add noise component
+        noise = random.uniform(-1, 1) * 0.5
+        # Add sine wave component
+        sine = math.sin(2 * math.pi * freq * t)
+        # Combine and apply envelope
+        volume = 0.8 * (1 - t / duration) ** 0.5
+        wave = 3072 * volume * (0.7 * noise + 0.3 * sine)
+        arr.append([int(wave), int(wave)])
+    
+    return pygame.sndarray.make_sound(numpy.array(arr, dtype=numpy.int16))
+
+# Generate synthesized sounds
 try:
-    # Try to load MP3 files
-    coin_sound = pygame.mixer.Sound("coin.mp3")  # Use your MP3 file
-    level_complete_sound = pygame.mixer.Sound("level_complete.mp3")  # Use your MP3 file
-    jump_sound = pygame.mixer.Sound("jump.mp3")  # Use your MP3 file
-    explosion_sound = pygame.mixer.Sound("explosion.mp3")  # Add this line
+    import numpy
     
-    # Set volume
-    coin_sound.set_volume(0.3)
-    level_complete_sound.set_volume(0.5)
-    jump_sound.set_volume(0.2)
-    explosion_sound.set_volume(1.0)
+    coin_sound = generate_coin_sound()
+    level_complete_sound = generate_level_complete_sound()
+    jump_sound = generate_jump_sound()
+    explosion_sound = generate_explosion_sound()
     
-    print("Successfully loaded MP3 sound files")
+    print("Successfully generated synthesized sounds")
+except ImportError:
+    print("Warning: NumPy not available for sound synthesis. Installing fallback sounds...")
+    # Fallback to simple tones without numpy
+    try:
+        coin_sound = generate_tone(523, 0.2, volume=0.3)  # C5 note
+        level_complete_sound = generate_tone(659, 0.5, volume=0.5)  # E5 note
+        jump_sound = generate_tone(300, 0.1, volume=0.2)  # Lower tone
+        explosion_sound = generate_tone(100, 0.3, volume=0.8)  # Low rumble
+        print("Using simple tone fallbacks")
+    except Exception as e:
+        print(f"Warning: Could not generate sounds: {e}")
+        print("Game will run without sound.")
+        # Create dummy sound objects that do nothing when played
+        class DummySound:
+            def play(self): pass
+            def set_volume(self, vol): pass
+        
+        coin_sound = DummySound()
+        level_complete_sound = DummySound()
+        jump_sound = DummySound()
+        explosion_sound = DummySound()
 except Exception as e:
-    print(f"Warning: Sound files could not be loaded: {e}")
+    print(f"Warning: Sound synthesis failed: {e}")
     print("Game will run without sound.")
     # Create dummy sound objects that do nothing when played
     class DummySound:
@@ -77,7 +207,7 @@ except Exception as e:
     coin_sound = DummySound()
     level_complete_sound = DummySound()
     jump_sound = DummySound()
-    explosion_sound = DummySound()  # Add this line
+    explosion_sound = DummySound()
 
 # Add these constants for the night sky
 NIGHT_SKY = (25, 25, 50)  # Dark blue for night sky
