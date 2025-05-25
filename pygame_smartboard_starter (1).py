@@ -2,6 +2,8 @@ import pygame
 import sys
 import math
 import random
+import json
+import os
 
 # Initialize Pygame
 pygame.init()
@@ -807,44 +809,130 @@ class LevelManager:
     def __init__(self):
         self.current_world = 1
         self.current_level = 1
-        self.max_worlds = 3  # Increase to 3 worlds
-        self.max_levels = 3
+        self.levels_dir = "levels"
+        self.available_levels = self.scan_available_levels()
+        self.max_worlds = max([level['world'] for level in self.available_levels]) if self.available_levels else 1
+        self.max_levels = max([level['level'] for level in self.available_levels if level['world'] == self.current_world]) if self.available_levels else 1
+    
+    def scan_available_levels(self):
+        """Scan the levels directory for available JSON level files"""
+        levels = []
+        if not os.path.exists(self.levels_dir):
+            print(f"Warning: {self.levels_dir} directory not found. Creating it...")
+            os.makedirs(self.levels_dir)
+            return levels
+        
+        for filename in os.listdir(self.levels_dir):
+            if filename.endswith('.json'):
+                try:
+                    with open(os.path.join(self.levels_dir, filename), 'r') as f:
+                        level_data = json.load(f)
+                        levels.append({
+                            'world': level_data.get('world', 1),
+                            'level': level_data.get('level', 1),
+                            'filename': filename,
+                            'name': level_data.get('name', 'Unnamed Level')
+                        })
+                except Exception as e:
+                    print(f"Error loading level {filename}: {e}")
+        
+        # Sort levels by world, then by level
+        levels.sort(key=lambda x: (x['world'], x['level']))
+        return levels
+    
+    def load_level_from_json(self, world, level):
+        """Load a level from JSON file"""
+        # Find the level file
+        level_file = None
+        for level_info in self.available_levels:
+            if level_info['world'] == world and level_info['level'] == level:
+                level_file = level_info['filename']
+                break
+        
+        if not level_file:
+            print(f"Warning: Level {world}-{level} not found. Using fallback.")
+            return self.create_fallback_level()
+        
+        try:
+            with open(os.path.join(self.levels_dir, level_file), 'r') as f:
+                level_data = json.load(f)
+                return self.parse_level_data(level_data)
+        except Exception as e:
+            print(f"Error loading level {level_file}: {e}")
+            return self.create_fallback_level()
+    
+    def parse_level_data(self, level_data):
+        """Parse JSON level data into game objects"""
+        platforms = []
+        coins = []
+        spikes = []
+        
+        # Create platforms
+        for platform_data in level_data.get('platforms', []):
+            color = tuple(platform_data.get('color', [139, 69, 19]))
+            platform = Platform(
+                platform_data['x'],
+                platform_data['y'],
+                platform_data['width'],
+                platform_data['height'],
+                color
+            )
+            platforms.append(platform)
+        
+        # Create coins
+        for coin_data in level_data.get('coins', []):
+            coin = Coin(coin_data['x'], coin_data['y'])
+            coins.append(coin)
+        
+        # Create spikes
+        for spike_data in level_data.get('spikes', []):
+            spike = Spike(
+                spike_data['x'],
+                spike_data['y'],
+                spike_data.get('width', 30),
+                spike_data.get('height', 15)
+            )
+            spikes.append(spike)
+        
+        total_coins = len(coins)
+        
+        # Store additional level info
+        self.current_level_data = level_data
+        
+        return platforms, coins, total_coins, spikes
+    
+    def create_fallback_level(self):
+        """Create a simple fallback level if JSON loading fails"""
+        platforms = [
+            Platform(0, SCREEN_HEIGHT - 40, SCREEN_WIDTH, 40),
+            Platform(200, SCREEN_HEIGHT - 150, 200, 20),
+            Platform(0, 0, 20, SCREEN_HEIGHT - 40),
+            Platform(SCREEN_WIDTH - 20, 0, 20, SCREEN_HEIGHT - 40),
+        ]
+        coins = [Coin(250, SCREEN_HEIGHT - 200)]
+        spikes = []
+        return platforms, coins, 1, spikes
     
     def get_level(self):
-        if self.current_world == 1:
-            if self.current_level == 1:
-                return create_world1_level_1()
-            elif self.current_level == 2:
-                return create_world1_level_2()
-            elif self.current_level == 3:
-                return create_world1_level_3()
-        elif self.current_world == 2:
-            if self.current_level == 1:
-                return create_world2_level_1()
-            elif self.current_level == 2:
-                return create_world2_level_2()
-            elif self.current_level == 3:
-                return create_world2_level_3()
-        elif self.current_world == 3:  # Add World 3
-            if self.current_level == 1:
-                return create_world3_level_1()
-            elif self.current_level == 2:
-                return create_world3_level_2()
-            elif self.current_level == 3:
-                return create_world3_level_3()
-        
-        # Default fallback
-        return create_world1_level_1()
+        return self.load_level_from_json(self.current_world, self.current_level)
+    
+    def get_current_level_data(self):
+        """Get the current level's metadata"""
+        return getattr(self, 'current_level_data', {})
     
     def next_level(self):
+        # Find next available level
+        current_levels_in_world = [l for l in self.available_levels if l['world'] == self.current_world]
+        max_level_in_world = max([l['level'] for l in current_levels_in_world]) if current_levels_in_world else 1
+        
         self.current_level += 1
-        if self.current_level > self.max_levels:
+        if self.current_level > max_level_in_world:
             self.current_level = 1
             self.current_world += 1
             if self.current_world > self.max_worlds:
                 # All levels complete
                 self.current_world = self.max_worlds
-                self.current_level = self.max_levels
+                self.current_level = max_level_in_world
                 return False
         return True
     
@@ -1312,30 +1400,16 @@ def create_world3_level_3():
     
     return platforms, coins, total_coins, spikes
 
-def update_goal_position(world, level):
-    is_door = (level == 3 and world < 3)  # It's a door if it's level 3 and not the last world
+def create_goal_from_level_data(level_manager):
+    """Create goal from current level data"""
+    level_data = level_manager.get_current_level_data()
+    goal_data = level_data.get('goal', {})
     
-    if world == 1:
-        if level == 1:
-            return Goal(SCREEN_WIDTH - 100, SCREEN_HEIGHT - 120, is_door=False)
-        elif level == 2:
-            return Goal(700, SCREEN_HEIGHT - 730, is_door=False)
-        elif level == 3:
-            return Goal(700, SCREEN_HEIGHT - 830, is_door=is_door)
-    elif world == 2:
-        if level == 1:
-            return Goal(900, SCREEN_HEIGHT - 450, is_door=False)
-        elif level == 2:
-            return Goal(850, SCREEN_HEIGHT - 680, is_door=False)
-        elif level == 3:
-            return Goal(500, SCREEN_HEIGHT - 700, is_door=is_door)
-    elif world == 3:
-        if level == 1:
-            return Goal(900, SCREEN_HEIGHT - 600, is_door=False)
-        elif level == 2:
-            return Goal(900, SCREEN_HEIGHT - 650, is_door=False)
-        elif level == 3:
-            return Goal(350, SCREEN_HEIGHT - 900, is_door=False)  # Updated position for the final goal
+    x = goal_data.get('x', SCREEN_WIDTH - 100)
+    y = goal_data.get('y', SCREEN_HEIGHT - 120)
+    is_door = goal_data.get('is_door', False)
+    
+    return Goal(x, y, is_door)
 
 # Create a Star class for the night sky background
 class Star:
@@ -1359,15 +1433,22 @@ class Star:
         pygame.draw.circle(screen, color, (self.x, self.y), self.size)
 
 def main():
-    # Create game objects
-    player1 = Player(100, SCREEN_HEIGHT - 100, BLUE, 1)
-    player2 = Player(150, SCREEN_HEIGHT - 100, RED, 2)
-    
     level_manager = LevelManager()
     platforms, coins, total_coins, spikes = level_manager.get_level()
     
-    # Set goal position based on level
-    goal = update_goal_position(level_manager.current_world, level_manager.current_level)
+    # Get player spawn positions from level data
+    level_data = level_manager.get_current_level_data()
+    player_spawns = level_data.get('player_spawns', [
+        {'x': 100, 'y': SCREEN_HEIGHT - 100},
+        {'x': 150, 'y': SCREEN_HEIGHT - 100}
+    ])
+    
+    # Create game objects with spawn positions
+    player1 = Player(player_spawns[0]['x'], player_spawns[0]['y'], BLUE, 1)
+    player2 = Player(player_spawns[1]['x'], player_spawns[1]['y'], RED, 2)
+    
+    # Set goal position based on level data
+    goal = create_goal_from_level_data(level_manager)
     
     # Create stars for night sky (World 2)
     stars = [Star() for _ in range(100)]
@@ -1402,7 +1483,7 @@ def main():
                         all_levels_complete = False
                     
                     platforms, coins, total_coins, spikes = level_manager.get_level()
-                    goal = update_goal_position(level_manager.current_world, level_manager.current_level)  # Update goal position
+                    goal = create_goal_from_level_data(level_manager)  # Update goal position
                     game_complete = False
                 elif event.key == pygame.K_n and game_complete and not all_levels_complete:
                     # Next level
@@ -1412,7 +1493,7 @@ def main():
                         player1.collected_coins = 0
                         player2.collected_coins = 0
                         platforms, coins, total_coins, spikes = level_manager.get_level()
-                        goal = update_goal_position(level_manager.current_world, level_manager.current_level)  # Update goal position
+                        goal = create_goal_from_level_data(level_manager)  # Update goal position
                         game_complete = False
                         
                         # Show world transition message if we just moved to a new world
@@ -1438,7 +1519,7 @@ def main():
                     player1.collected_coins = 0
                     player2.collected_coins = 0
                     platforms, coins, total_coins, spikes = level_manager.get_level()
-                    goal = update_goal_position(level_manager.current_world, level_manager.current_level)
+                    goal = create_goal_from_level_data(level_manager)
                     game_complete = False
                     all_levels_complete = False
                 elif event.key == pygame.K_2:
@@ -1449,7 +1530,7 @@ def main():
                     player1.collected_coins = 0
                     player2.collected_coins = 0
                     platforms, coins, total_coins, spikes = level_manager.get_level()
-                    goal = update_goal_position(level_manager.current_world, level_manager.current_level)
+                    goal = create_goal_from_level_data(level_manager)
                     game_complete = False
                     all_levels_complete = False
                 elif event.key == pygame.K_3:
@@ -1460,7 +1541,7 @@ def main():
                     player1.collected_coins = 0
                     player2.collected_coins = 0
                     platforms, coins, total_coins, spikes = level_manager.get_level()
-                    goal = update_goal_position(level_manager.current_world, level_manager.current_level)
+                    goal = create_goal_from_level_data(level_manager)
                     game_complete = False
                     all_levels_complete = False
         
@@ -1511,14 +1592,17 @@ def main():
                     goal.door_open = False
         
         # Draw everything
-        if level_manager.current_world == 1:
-            screen.fill((135, 206, 235))  # Sky blue for day time (World 1)
-        else:
-            screen.fill(NIGHT_SKY)  # Dark blue for night time (World 2)
+        level_data = level_manager.get_current_level_data()
+        background_type = level_data.get('background_type', 'day')
+        
+        if background_type == 'night':
+            screen.fill(NIGHT_SKY)  # Dark blue for night time
             # Update and draw stars
             for star in stars:
                 star.update(time_elapsed)
                 star.draw(screen)
+        else:
+            screen.fill((135, 206, 235))  # Sky blue for day time
         
         # Draw platforms
         for platform in platforms:
