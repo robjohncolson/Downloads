@@ -484,13 +484,16 @@ class LevelEditor:
         self.browser = None
         self.show_browser = False
         
+        # Help overlay
+        self.show_help = False
+        
         print("=== Enhanced Platformer Level Editor ===")
         print("1-5: Switch modes (Platform/Coin/Spike/Goal/Spawn)")
         print("Mouse: Left click - Place/Select, Right click - Delete")
         print("WASD: Move camera, G: Toggle grid, Tab: Switch spawn point")
         print("Ctrl+S: Save As, Ctrl+L: Load Browser, Ctrl+N: New level")
         print("B: Toggle background (day/night), F11: Toggle fullscreen")
-        print("F: Frame all objects, R: Reset camera")
+        print("F: Frame all objects, R: Reset camera, H: Toggle help")
         print("ESC: Exit")
         print("========================================")
     
@@ -614,6 +617,9 @@ class LevelEditor:
                     self.camera_x = 0
                     self.camera_y = 0
                     print("Camera reset to origin")
+                elif event.key == pygame.K_h:
+                    self.show_help = not self.show_help
+                    print(f"Help overlay: {'ON' if self.show_help else 'OFF'}")
                 elif event.key == pygame.K_1:
                     self.mode = "platform"
                     print("Platform mode")
@@ -916,6 +922,111 @@ class LevelEditor:
             self.screen.blit(surface, (20, y_pos))
             y_pos += 20
     
+    def draw_help_overlay(self):
+        """Draw the help overlay with all shortcut keys"""
+        if not self.show_help:
+            return
+        
+        # Get current screen dimensions
+        screen_width, screen_height = self.screen.get_size()
+        
+        # Create semi-transparent overlay
+        overlay = pygame.Surface((screen_width, screen_height))
+        overlay.set_alpha(200)
+        overlay.fill(BLACK)
+        self.screen.blit(overlay, (0, 0))
+        
+        # Help panel dimensions
+        panel_width = min(800, screen_width - 100)
+        panel_height = min(600, screen_height - 100)
+        panel_x = (screen_width - panel_width) // 2
+        panel_y = (screen_height - panel_height) // 2
+        
+        # Draw help panel
+        help_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
+        pygame.draw.rect(self.screen, DARK_GRAY, help_rect)
+        pygame.draw.rect(self.screen, WHITE, help_rect, 3)
+        
+        # Title
+        title_font = pygame.font.Font(None, 36)
+        title_text = title_font.render("Level Editor - Shortcut Keys", True, WHITE)
+        title_x = panel_x + (panel_width - title_text.get_width()) // 2
+        self.screen.blit(title_text, (title_x, panel_y + 20))
+        
+        # Help content in two columns
+        left_x = panel_x + 30
+        right_x = panel_x + panel_width // 2 + 20
+        start_y = panel_y + 80
+        
+        # Left column - Mode and Object Controls
+        left_content = [
+            ("MODES:", WHITE),
+            ("1 - Platform Mode", LIGHT_GRAY),
+            ("2 - Coin Mode", LIGHT_GRAY),
+            ("3 - Spike Mode", LIGHT_GRAY),
+            ("4 - Goal Mode", LIGHT_GRAY),
+            ("5 - Spawn Mode", LIGHT_GRAY),
+            ("", WHITE),
+            ("MOUSE CONTROLS:", WHITE),
+            ("Left Click - Place/Select object", LIGHT_GRAY),
+            ("Right Click - Delete object", LIGHT_GRAY),
+            ("Drag (Platform/Spike) - Draw rectangle", LIGHT_GRAY),
+            ("", WHITE),
+            ("CAMERA:", WHITE),
+            ("W/A/S/D - Move camera", LIGHT_GRAY),
+            ("Shift + WASD - Move faster", LIGHT_GRAY),
+            ("F - Frame all objects", LIGHT_GRAY),
+            ("R - Reset camera to origin", LIGHT_GRAY),
+        ]
+        
+        # Right column - File and Display Controls
+        right_content = [
+            ("FILE OPERATIONS:", WHITE),
+            ("Ctrl+S - Save level", LIGHT_GRAY),
+            ("Ctrl+L - Load level", LIGHT_GRAY),
+            ("Ctrl+N - New level", LIGHT_GRAY),
+            ("", WHITE),
+            ("DISPLAY:", WHITE),
+            ("G - Toggle grid", LIGHT_GRAY),
+            ("B - Toggle background (day/night)", LIGHT_GRAY),
+            ("F11 - Toggle fullscreen", LIGHT_GRAY),
+            ("H - Toggle this help", LIGHT_GRAY),
+            ("", WHITE),
+            ("SPAWN MODE:", WHITE),
+            ("Tab - Switch between spawn points", LIGHT_GRAY),
+            ("", WHITE),
+            ("OTHER:", WHITE),
+            ("ESC - Exit editor", LIGHT_GRAY),
+        ]
+        
+        # Draw left column
+        y_pos = start_y
+        for text, color in left_content:
+            if text:
+                if color == WHITE:  # Headers
+                    surface = self.font.render(text, True, color)
+                else:  # Regular items
+                    surface = self.small_font.render(text, True, color)
+                self.screen.blit(surface, (left_x, y_pos))
+            y_pos += 25 if color == WHITE else 20
+        
+        # Draw right column
+        y_pos = start_y
+        for text, color in right_content:
+            if text:
+                if color == WHITE:  # Headers
+                    surface = self.font.render(text, True, color)
+                else:  # Regular items
+                    surface = self.small_font.render(text, True, color)
+                self.screen.blit(surface, (right_x, y_pos))
+            y_pos += 25 if color == WHITE else 20
+        
+        # Footer instruction
+        footer_text = self.font.render("Press H to close this help", True, YELLOW)
+        footer_x = panel_x + (panel_width - footer_text.get_width()) // 2
+        footer_y = panel_y + panel_height - 40
+        self.screen.blit(footer_text, (footer_x, footer_y))
+    
     def run(self):
         running = True
         
@@ -937,6 +1048,9 @@ class LevelEditor:
             # Draw browser overlay if open
             if self.show_browser and self.browser:
                 self.browser.draw(self.screen)
+            
+            # Draw help overlay if open
+            self.draw_help_overlay()
             
             # Update display
             pygame.display.flip()
