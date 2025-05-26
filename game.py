@@ -301,6 +301,10 @@ except Exception as e:
 NIGHT_SKY = (25, 25, 50)  # Dark blue for night sky
 STAR_COLOR = (255, 255, 200)  # Yellowish white for stars
 
+# Game states
+GAME_STATE_LEVEL_SELECT = "LEVEL_SELECT"
+GAME_STATE_PLAYING = "PLAYING"
+
 def setup_display():
     """Setup display mode (fullscreen or windowed)"""
     global screen, SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN
@@ -1497,23 +1501,254 @@ class Star:
                  int(STAR_COLOR[2] * self.brightness))
         pygame.draw.circle(screen, color, (self.x, self.y), self.size)
 
+class LevelPortal:
+    def __init__(self, x, y, world, level, portal_type="door"):
+        self.rect = pygame.Rect(x, y, 80, 100)
+        self.world = world
+        self.level = level
+        self.portal_type = portal_type  # "door", "pipe", "portal"
+        self.is_available = True
+        self.glow_time = 0
+        self.both_players_touching = False
+        
+        # Portal-specific colors
+        if world == 1:
+            self.color = (139, 69, 19)  # Brown for world 1
+            self.accent_color = GREEN
+        elif world == 2:
+            self.color = (75, 75, 75)  # Dark gray for world 2
+            self.accent_color = PURPLE
+        elif world == 3:
+            self.color = (50, 50, 100)  # Dark blue for world 3
+            self.accent_color = (255, 215, 0)  # Gold
+        else:
+            self.color = GRAY
+            self.accent_color = WHITE
+    
+    def update(self, player1, player2):
+        # Check if both players are touching this portal
+        p1_touching = self.rect.colliderect(player1.rect)
+        p2_touching = self.rect.colliderect(player2.rect)
+        self.both_players_touching = p1_touching and p2_touching
+        
+        # Update glow animation
+        self.glow_time += 0.1
+    
+    def draw(self, screen):
+        # Calculate glow effect
+        glow_alpha = int(128 + 127 * math.sin(self.glow_time))
+        
+        if self.portal_type == "door":
+            # Draw door frame
+            pygame.draw.rect(screen, self.color, self.rect)
+            pygame.draw.rect(screen, BLACK, self.rect, 3)
+            
+            # Draw door panel
+            inner_rect = pygame.Rect(self.rect.x + 10, self.rect.y + 10, 
+                                   self.rect.width - 20, self.rect.height - 20)
+            pygame.draw.rect(screen, self.accent_color, inner_rect)
+            
+            # Draw door knob
+            knob_x = self.rect.right - 20
+            knob_y = self.rect.centery
+            pygame.draw.circle(screen, YELLOW, (knob_x, knob_y), 5)
+            
+            # Draw level number on door
+            level_text = font_medium.render(f"{self.level}", True, WHITE)
+            text_rect = level_text.get_rect(center=(self.rect.centerx, self.rect.centery))
+            screen.blit(level_text, text_rect)
+            
+        elif self.portal_type == "pipe":
+            # Draw Mario-style pipe
+            # Main pipe body
+            pygame.draw.rect(screen, GREEN, self.rect)
+            pygame.draw.rect(screen, BLACK, self.rect, 3)
+            
+            # Pipe opening at top
+            opening_rect = pygame.Rect(self.rect.x - 5, self.rect.y - 10, 
+                                     self.rect.width + 10, 20)
+            pygame.draw.rect(screen, (0, 150, 0), opening_rect)
+            pygame.draw.rect(screen, BLACK, opening_rect, 3)
+            
+            # Level number
+            level_text = font_medium.render(f"{self.level}", True, WHITE)
+            text_rect = level_text.get_rect(center=(self.rect.centerx, self.rect.centery))
+            screen.blit(level_text, text_rect)
+            
+        elif self.portal_type == "portal":
+            # Draw magical portal
+            # Outer ring
+            pygame.draw.circle(screen, self.accent_color, self.rect.center, 50, 5)
+            # Inner swirling effect
+            for i in range(3):
+                angle = self.glow_time * 2 + i * (2 * math.pi / 3)
+                inner_x = self.rect.centerx + 30 * math.cos(angle)
+                inner_y = self.rect.centery + 30 * math.sin(angle)
+                pygame.draw.circle(screen, self.color, (int(inner_x), int(inner_y)), 8)
+            
+            # Center portal
+            pygame.draw.circle(screen, (0, 0, 0), self.rect.center, 25)
+            
+            # Level number
+            level_text = font_medium.render(f"{self.level}", True, self.accent_color)
+            text_rect = level_text.get_rect(center=self.rect.center)
+            screen.blit(level_text, text_rect)
+        
+        # Draw glow effect if both players are touching
+        if self.both_players_touching:
+            glow_surface = pygame.Surface((self.rect.width + 20, self.rect.height + 20), pygame.SRCALPHA)
+            pygame.draw.rect(glow_surface, (*WHITE, glow_alpha//2), 
+                           (0, 0, self.rect.width + 20, self.rect.height + 20), 5)
+            screen.blit(glow_surface, (self.rect.x - 10, self.rect.y - 10))
+        
+        # Draw world label above portal
+        world_text = font_small.render(f"World {self.world}", True, WHITE)
+        world_rect = world_text.get_rect(center=(self.rect.centerx, self.rect.y - 15))
+        screen.blit(world_text, world_rect)
+
+class LevelSelectMap:
+    def __init__(self, level_manager):
+        self.level_manager = level_manager
+        self.platforms = []
+        self.portals = []
+        self.create_level_select_map()
+    
+    def create_level_select_map(self):
+        # Create the level select map layout
+        
+        # Ground platforms for each world
+        # World 1 area (left side)
+        self.platforms.append(Platform(50, SCREEN_HEIGHT - 40, 300, 40, (139, 69, 19)))
+        self.platforms.append(Platform(100, SCREEN_HEIGHT - 120, 200, 20, (139, 69, 19)))
+        
+        # World 2 area (middle, elevated)
+        self.platforms.append(Platform(450, SCREEN_HEIGHT - 200, 300, 40, (75, 75, 75)))
+        self.platforms.append(Platform(500, SCREEN_HEIGHT - 280, 200, 20, (75, 75, 75)))
+        
+        # World 3 area (right side, highest)
+        self.platforms.append(Platform(850, SCREEN_HEIGHT - 360, 350, 40, (50, 50, 100)))
+        self.platforms.append(Platform(900, SCREEN_HEIGHT - 440, 250, 20, (50, 50, 100)))
+        
+        # Connecting platforms between worlds
+        self.platforms.append(Platform(350, SCREEN_HEIGHT - 120, 100, 20, GRAY))  # World 1 to 2
+        self.platforms.append(Platform(750, SCREEN_HEIGHT - 280, 100, 20, GRAY))  # World 2 to 3
+        
+        # Create portals for each available level
+        available_levels = self.level_manager.available_levels
+        
+        for level_info in available_levels:
+            world = level_info['world']
+            level = level_info['level']
+            
+            if world == 1:
+                # World 1 portals on lower platform
+                x = 120 + (level - 1) * 90
+                y = SCREEN_HEIGHT - 220
+                portal_type = "door"
+            elif world == 2:
+                # World 2 portals on middle platform  
+                x = 520 + (level - 1) * 90
+                y = SCREEN_HEIGHT - 380
+                portal_type = "pipe"
+            elif world == 3:
+                # World 3 portals on upper platform
+                x = 920 + (level - 1) * 90
+                y = SCREEN_HEIGHT - 540
+                portal_type = "portal"
+            else:
+                continue
+                
+            portal = LevelPortal(x, y, world, level, portal_type)
+            self.portals.append(portal)
+        
+        # Add some decorative elements
+        # World 1: Normal grass and trees
+        self.platforms.append(Platform(80, SCREEN_HEIGHT - 60, 20, 20, GREEN))  # Grass block
+        self.platforms.append(Platform(280, SCREEN_HEIGHT - 60, 20, 20, GREEN))  # Grass block
+        
+        # World 2: Dark/spiky decorations
+        self.platforms.append(Platform(480, SCREEN_HEIGHT - 220, 20, 20, (50, 50, 50)))  # Dark block
+        self.platforms.append(Platform(680, SCREEN_HEIGHT - 220, 20, 20, (50, 50, 50)))  # Dark block
+        
+        # World 3: Floating magical platforms
+        self.platforms.append(Platform(880, SCREEN_HEIGHT - 380, 20, 20, (100, 50, 150)))  # Magic block
+        self.platforms.append(Platform(1180, SCREEN_HEIGHT - 380, 20, 20, (100, 50, 150)))  # Magic block
+    
+    def update(self, player1, player2):
+        # Update all portals
+        for portal in self.portals:
+            portal.update(player1, player2)
+    
+    def check_portal_activation(self, player1, player2):
+        # Check if players want to enter a portal
+        for portal in self.portals:
+            if portal.both_players_touching:
+                return portal.world, portal.level
+        return None, None
+    
+    def draw(self, screen):
+        # Draw gradient sky background for level select
+        for y in range(SCREEN_HEIGHT):
+            ratio = y / SCREEN_HEIGHT
+            r = int(135 * (1 - ratio) + 100 * ratio)
+            g = int(206 * (1 - ratio) + 150 * ratio)
+            b = int(235 * (1 - ratio) + 200 * ratio)
+            pygame.draw.line(screen, (r, g, b), (0, y), (SCREEN_WIDTH, y))
+        
+        # Draw platforms
+        for platform in self.platforms:
+            platform.draw(screen)
+        
+        # Draw portals
+        for portal in self.portals:
+            portal.draw(screen)
+        
+        # Draw world area labels
+        world1_text = font_large.render("WORLD 1", True, (139, 69, 19))
+        world1_rect = world1_text.get_rect(center=(200, SCREEN_HEIGHT - 300))
+        screen.blit(world1_text, world1_rect)
+        
+        world2_text = font_large.render("WORLD 2", True, (75, 75, 75))
+        world2_rect = world2_text.get_rect(center=(600, SCREEN_HEIGHT - 460))
+        screen.blit(world2_text, world2_rect)
+        
+        world3_text = font_large.render("WORLD 3", True, (50, 50, 100))
+        world3_rect = world3_text.get_rect(center=(1025, SCREEN_HEIGHT - 620))
+        screen.blit(world3_text, world3_rect)
+        
+        # Draw title
+        title_text = font_large.render("LEVEL SELECT", True, BLACK)
+        title_rect = title_text.get_rect(center=(SCREEN_WIDTH//2, 50))
+        # Add background for title
+        pygame.draw.rect(screen, WHITE, title_rect.inflate(40, 20))
+        pygame.draw.rect(screen, BLACK, title_rect.inflate(40, 20), 3)
+        screen.blit(title_text, title_rect)
+        
+        # Draw instructions
+        instruction_text = font_medium.render("Walk both players to a level entrance and press SPACE to enter!", True, BLACK)
+        instruction_rect = instruction_text.get_rect(center=(SCREEN_WIDTH//2, 100))
+        pygame.draw.rect(screen, WHITE, instruction_rect.inflate(20, 10))
+        screen.blit(instruction_text, instruction_rect)
+
 def main():
     level_manager = LevelManager()
-    platforms, coins, total_coins, spikes = level_manager.get_level()
     
-    # Get player spawn positions from level data
-    level_data = level_manager.get_current_level_data()
-    player_spawns = level_data.get('player_spawns', [
-        {'x': 100, 'y': SCREEN_HEIGHT - 100},
-        {'x': 150, 'y': SCREEN_HEIGHT - 100}
-    ])
+    # Initialize game state
+    game_state = GAME_STATE_LEVEL_SELECT
     
-    # Create game objects with spawn positions
-    player1 = Player(player_spawns[0]['x'], player_spawns[0]['y'], BLUE, 1)
-    player2 = Player(player_spawns[1]['x'], player_spawns[1]['y'], RED, 2)
+    # Create level select map
+    level_select_map = LevelSelectMap(level_manager)
     
-    # Set goal position based on level data
-    goal = create_goal_from_level_data(level_manager)
+    # Create players for level select (start in World 1 area)
+    player1 = Player(150, SCREEN_HEIGHT - 100, BLUE, 1)
+    player2 = Player(200, SCREEN_HEIGHT - 100, RED, 2)
+    
+    # Game state variables
+    platforms = []
+    coins = []
+    total_coins = 0
+    spikes = []
+    goal = None
     
     # Create stars for night sky (World 2)
     stars = [Star() for _ in range(100)]
@@ -1535,9 +1770,60 @@ def main():
                 running = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    running = False
-                elif event.key == pygame.K_r:
-                    # Reset level
+                    if game_state == GAME_STATE_PLAYING:
+                        # Return to level select
+                        game_state = GAME_STATE_LEVEL_SELECT
+                        player1.rect.x = 150
+                        player1.rect.y = SCREEN_HEIGHT - 100
+                        player2.rect.x = 200 
+                        player2.rect.y = SCREEN_HEIGHT - 100
+                        player1.vel_x = 0
+                        player1.vel_y = 0
+                        player2.vel_x = 0
+                        player2.vel_y = 0
+                        player1.collected_coins = 0
+                        player2.collected_coins = 0
+                    else:
+                        running = False
+                elif event.key == pygame.K_SPACE:
+                    if game_state == GAME_STATE_LEVEL_SELECT:
+                        # Check if players want to enter a portal
+                        target_world, target_level = level_select_map.check_portal_activation(player1, player2)
+                        if target_world and target_level:
+                            # Enter the selected level
+                            level_manager.current_world = target_world
+                            level_manager.current_level = target_level
+                            platforms, coins, total_coins, spikes = level_manager.get_level()
+                            goal = create_goal_from_level_data(level_manager)
+                            
+                            # Get player spawn positions from level data
+                            level_data = level_manager.get_current_level_data()
+                            player_spawns = level_data.get('player_spawns', [
+                                {'x': 100, 'y': SCREEN_HEIGHT - 100},
+                                {'x': 150, 'y': SCREEN_HEIGHT - 100}
+                            ])
+                            
+                            # Reset players to level spawn positions
+                            player1.rect.x = player_spawns[0]['x']
+                            player1.rect.y = player_spawns[0]['y']
+                            player2.rect.x = player_spawns[1]['x']
+                            player2.rect.y = player_spawns[1]['y']
+                            player1.vel_x = 0
+                            player1.vel_y = 0
+                            player2.vel_x = 0
+                            player2.vel_y = 0
+                            player1.collected_coins = 0
+                            player2.collected_coins = 0
+                            player1.is_dying = False
+                            player2.is_dying = False
+                            
+                            game_state = GAME_STATE_PLAYING
+                            game_complete = False
+                            
+                            # Play jump sound for level entry
+                            jump_sound.play()
+                elif event.key == pygame.K_r and game_state == GAME_STATE_PLAYING:
+                    # Reset current level
                     player1.respawn()
                     player2.respawn()
                     player1.collected_coins = 0
@@ -1548,9 +1834,9 @@ def main():
                         all_levels_complete = False
                     
                     platforms, coins, total_coins, spikes = level_manager.get_level()
-                    goal = create_goal_from_level_data(level_manager)  # Update goal position
+                    goal = create_goal_from_level_data(level_manager)
                     game_complete = False
-                elif event.key == pygame.K_n and game_complete and not all_levels_complete:
+                elif event.key == pygame.K_n and game_complete and not all_levels_complete and game_state == GAME_STATE_PLAYING:
                     # Next level
                     if level_manager.next_level():
                         player1.respawn()
@@ -1558,7 +1844,7 @@ def main():
                         player1.collected_coins = 0
                         player2.collected_coins = 0
                         platforms, coins, total_coins, spikes = level_manager.get_level()
-                        goal = create_goal_from_level_data(level_manager)  # Update goal position
+                        goal = create_goal_from_level_data(level_manager)
                         game_complete = False
                         
                         # Show world transition message if we just moved to a new world
@@ -1575,48 +1861,23 @@ def main():
                             pygame.time.delay(2000)  # 2 second pause
                     else:
                         all_levels_complete = True
-                # Level selection shortcuts
-                elif event.key == pygame.K_1:
-                    # Switch to level 1
-                    level_manager.current_level = 1
-                    player1.respawn()
-                    player2.respawn()
-                    player1.collected_coins = 0
-                    player2.collected_coins = 0
-                    platforms, coins, total_coins, spikes = level_manager.get_level()
-                    goal = create_goal_from_level_data(level_manager)
-                    game_complete = False
-                    all_levels_complete = False
-                elif event.key == pygame.K_2:
-                    # Switch to level 2
-                    level_manager.current_level = 2
-                    player1.respawn()
-                    player2.respawn()
-                    player1.collected_coins = 0
-                    player2.collected_coins = 0
-                    platforms, coins, total_coins, spikes = level_manager.get_level()
-                    goal = create_goal_from_level_data(level_manager)
-                    game_complete = False
-                    all_levels_complete = False
-                elif event.key == pygame.K_3:
-                    # Switch to level 3
-                    level_manager.current_level = 3
-                    player1.respawn()
-                    player2.respawn()
-                    player1.collected_coins = 0
-                    player2.collected_coins = 0
-                    platforms, coins, total_coins, spikes = level_manager.get_level()
-                    goal = create_goal_from_level_data(level_manager)
-                    game_complete = False
-                    all_levels_complete = False
                 elif event.key == pygame.K_F11:
                     # Toggle fullscreen
                     global FULLSCREEN
                     FULLSCREEN = not FULLSCREEN
                     setup_display()
         
-        if not game_complete:
-            # Update game objects
+        # Update game logic based on current state
+        if game_state == GAME_STATE_LEVEL_SELECT:
+            # Update level select map
+            level_select_map.update(player1, player2)
+            
+            # Update players in level select (they use level select platforms)
+            player1.update(level_select_map.platforms, [], keys_pressed, [player2])
+            player2.update(level_select_map.platforms, [], keys_pressed, [player1])
+            
+        elif game_state == GAME_STATE_PLAYING and not game_complete:
+            # Update game objects in playing state
             player1.update(platforms, coins, keys_pressed, [player2])
             player2.update(platforms, coins, keys_pressed, [player1])
             
@@ -1644,7 +1905,7 @@ def main():
                 coin.update()
             
             # Check win condition
-            if (player1.rect.colliderect(goal.rect) and 
+            if (goal and player1.rect.colliderect(goal.rect) and 
                 player2.rect.colliderect(goal.rect) and 
                 len(coins) == 0):
                 game_complete = True
@@ -1653,128 +1914,155 @@ def main():
             if len(coins) == 0:
                 player1.happy_face = True
                 player2.happy_face = True
-                if goal.is_door:
+                if goal and goal.is_door:
                     goal.door_open = True
             else:
                 player1.happy_face = False
                 player2.happy_face = False
-                if goal.is_door:
+                if goal and goal.is_door:
                     goal.door_open = False
         
-        # Draw everything to screen
-        level_data = level_manager.get_current_level_data()
-        background_type = level_data.get('background_type', 'day')
-        background_color = get_current_background_color(level_data)
-        text_color = get_text_color(background_color)
-        
-        if background_type == 'night':
-            screen.fill(NIGHT_SKY)  # Dark blue for night time
-            # Update and draw stars
-            for star in stars:
-                star.update(time_elapsed)
-                star.draw(screen)
-        else:
-            screen.fill((135, 206, 235))  # Sky blue for day time
-        
-        # Draw platforms
-        for platform in platforms:
-            platform.draw(screen)
-        
-        # Draw coins
-        for coin in coins:
-            coin.draw(screen)
-        
-        # Draw goal
-        goal.draw(screen)
-        
-        # Draw players
-        player1.draw(screen)
-        player2.draw(screen)
-        
-        # Draw spikes
-        for spike in spikes:
-            spike.draw(screen)
-        
-        # Draw spike message if needed
-        if show_spike_message:
-            spike_message_timer -= 1
-            if spike_message_timer <= 0:
-                show_spike_message = False
+        # Draw everything to screen based on current state
+        if game_state == GAME_STATE_LEVEL_SELECT:
+            # Draw level select screen
+            level_select_map.draw(screen)
             
-            message_text = font_large.render("DANGER! SPIKES!", True, RED)
-            message_rect = message_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 50))
-            pygame.draw.rect(screen, WHITE, message_rect.inflate(40, 20))
-            pygame.draw.rect(screen, BLACK, message_rect.inflate(40, 20), 3)
-            screen.blit(message_text, message_rect)
+            # Draw players
+            player1.draw(screen)
+            player2.draw(screen)
             
-            sub_message = font_medium.render("Returning to beginning of world...", True, BLACK)
-            sub_rect = sub_message.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 20))
-            screen.blit(sub_message, sub_rect)
-        
-        # Draw UI with dynamic text color
-        collected_coins = player1.collected_coins + player2.collected_coins
-        score_text = font_medium.render(f"Coins: {collected_coins}/{total_coins}", True, text_color)
-        screen.blit(score_text, (20, 20))
-        
-        # Display current world and level with dynamic text color
-        level_text = font_medium.render(f"World: {level_manager.current_world} Level: {level_manager.current_level}", True, text_color)
-        screen.blit(level_text, (20, 60))
-        
-        # Draw instructions with dynamic text color
-        instructions = [
-            "Player 1: WASD to move",
-            "Player 2: Arrow keys to move",
-            "Players can stand on each other to reach higher platforms!",
-            "Jump off walls to reach higher areas!",
-            "Collect all coins and reach the flag together!",
-            "Press 1, 2, or 3 to switch levels, R to restart, F11 for fullscreen, ESC to exit"
-        ]
-        
-        for i, instruction in enumerate(instructions):
-            inst_text = font_small.render(instruction, True, text_color)
-            screen.blit(inst_text, (20, SCREEN_HEIGHT - 100 + i * 25))
-        
-        if game_complete:
-            if all_levels_complete:
-                # Final victory message
-                victory_text = font_large.render("ALL WORLDS COMPLETE!", True, GREEN)
-                victory_rect = victory_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
-                pygame.draw.rect(screen, WHITE, victory_rect.inflate(40, 20))
-                pygame.draw.rect(screen, BLACK, victory_rect.inflate(40, 20), 3)
-                screen.blit(victory_text, victory_rect)
-                
-                continue_text = font_medium.render("Press R to play again from World 1", True, BLACK)
-                continue_rect = continue_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 80))
-                screen.blit(continue_text, continue_rect)
+            # Draw additional UI for level select
+            controls_text = font_small.render("Player 1: WASD | Player 2: Arrow Keys | Both players on portal + SPACE to enter", True, BLACK)
+            controls_rect = controls_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT - 30))
+            pygame.draw.rect(screen, WHITE, controls_rect.inflate(20, 10))
+            screen.blit(controls_text, controls_rect)
+            
+            # Show portal entry prompt if both players are on a portal
+            target_world, target_level = level_select_map.check_portal_activation(player1, player2)
+            if target_world and target_level:
+                prompt_text = font_large.render(f"Press SPACE to enter World {target_world} Level {target_level}!", True, GREEN)
+                prompt_rect = prompt_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
+                pygame.draw.rect(screen, WHITE, prompt_rect.inflate(40, 20))
+                pygame.draw.rect(screen, BLACK, prompt_rect.inflate(40, 20), 3)
+                screen.blit(prompt_text, prompt_rect)
+            
+        elif game_state == GAME_STATE_PLAYING:
+            # Draw playing state
+            level_data = level_manager.get_current_level_data()
+            background_type = level_data.get('background_type', 'day')
+            background_color = get_current_background_color(level_data)
+            text_color = get_text_color(background_color)
+            
+            if background_type == 'night':
+                screen.fill(NIGHT_SKY)  # Dark blue for night time
+                # Update and draw stars
+                for star in stars:
+                    star.update(time_elapsed)
+                    star.draw(screen)
             else:
-                # Level complete message
-                if level_manager.current_level == 3 and level_manager.current_world < level_manager.max_worlds:
-                    # End of world message
-                    victory_text = font_large.render(f"WORLD {level_manager.current_world} COMPLETE!", True, GREEN)
-                else:
-                    # Regular level complete message
-                    victory_text = font_large.render(f"WORLD {level_manager.current_world} LEVEL {level_manager.current_level} COMPLETE!", True, GREEN)
-                    
-                victory_rect = victory_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
-                pygame.draw.rect(screen, WHITE, victory_rect.inflate(40, 20))
-                pygame.draw.rect(screen, BLACK, victory_rect.inflate(40, 20), 3)
-                screen.blit(victory_text, victory_rect)
-                
-                if level_manager.current_level < level_manager.max_levels or level_manager.current_world < level_manager.max_worlds:
-                    continue_text = font_medium.render("Press N for next level or R to replay", True, BLACK)
-                else:
-                    continue_text = font_medium.render("Press N to finish or R to replay", True, BLACK)
-                    
-                continue_rect = continue_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 80))
-                screen.blit(continue_text, continue_rect)
+                screen.fill((135, 206, 235))  # Sky blue for day time
+            
+            # Draw platforms
+            for platform in platforms:
+                platform.draw(screen)
+            
+            # Draw coins
+            for coin in coins:
+                coin.draw(screen)
+            
+            # Draw goal
+            if goal:
+                goal.draw(screen)
+            
+            # Draw players
+            player1.draw(screen)
+            player2.draw(screen)
+            
+            # Draw spikes
+            for spike in spikes:
+                spike.draw(screen)
         
-        # Play level complete sound when game is won
-        if (player1.rect.colliderect(goal.rect) and 
-            player2.rect.colliderect(goal.rect) and 
-            len(coins) == 0 and
-            not game_complete):  # Only play once when first completing
-            level_complete_sound.play()
-            game_complete = True
+            # Draw spike message if needed (only in playing state)
+            if show_spike_message:
+                spike_message_timer -= 1
+                if spike_message_timer <= 0:
+                    show_spike_message = False
+                
+                message_text = font_large.render("DANGER! SPIKES!", True, RED)
+                message_rect = message_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 - 50))
+                pygame.draw.rect(screen, WHITE, message_rect.inflate(40, 20))
+                pygame.draw.rect(screen, BLACK, message_rect.inflate(40, 20), 3)
+                screen.blit(message_text, message_rect)
+                
+                sub_message = font_medium.render("Returning to beginning of world...", True, BLACK)
+                sub_rect = sub_message.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 20))
+                screen.blit(sub_message, sub_rect)
+            
+            # Draw UI with dynamic text color
+            collected_coins = player1.collected_coins + player2.collected_coins
+            score_text = font_medium.render(f"Coins: {collected_coins}/{total_coins}", True, text_color)
+            screen.blit(score_text, (20, 20))
+            
+            # Display current world and level with dynamic text color
+            level_text = font_medium.render(f"World: {level_manager.current_world} Level: {level_manager.current_level}", True, text_color)
+            screen.blit(level_text, (20, 60))
+            
+            # Draw instructions with dynamic text color
+            instructions = [
+                "Player 1: WASD to move",
+                "Player 2: Arrow keys to move",
+                "Players can stand on each other to reach higher platforms!",
+                "Jump off walls to reach higher areas!",
+                "Collect all coins and reach the flag together!",
+                "Press R to restart, ESC to return to level select, F11 for fullscreen"
+            ]
+            
+            for i, instruction in enumerate(instructions):
+                inst_text = font_small.render(instruction, True, text_color)
+                screen.blit(inst_text, (20, SCREEN_HEIGHT - 120 + i * 18))
+            
+            # Draw completion messages
+            if game_complete:
+                if all_levels_complete:
+                    # Final victory message
+                    victory_text = font_large.render("ALL WORLDS COMPLETE!", True, GREEN)
+                    victory_rect = victory_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
+                    pygame.draw.rect(screen, WHITE, victory_rect.inflate(40, 20))
+                    pygame.draw.rect(screen, BLACK, victory_rect.inflate(40, 20), 3)
+                    screen.blit(victory_text, victory_rect)
+                    
+                    continue_text = font_medium.render("Press ESC to return to level select", True, BLACK)
+                    continue_rect = continue_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 80))
+                    screen.blit(continue_text, continue_rect)
+                else:
+                    # Level complete message
+                    if level_manager.current_level == 3 and level_manager.current_world < level_manager.max_worlds:
+                        # End of world message
+                        victory_text = font_large.render(f"WORLD {level_manager.current_world} COMPLETE!", True, GREEN)
+                    else:
+                        # Regular level complete message
+                        victory_text = font_large.render(f"WORLD {level_manager.current_world} LEVEL {level_manager.current_level} COMPLETE!", True, GREEN)
+                        
+                    victory_rect = victory_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
+                    pygame.draw.rect(screen, WHITE, victory_rect.inflate(40, 20))
+                    pygame.draw.rect(screen, BLACK, victory_rect.inflate(40, 20), 3)
+                    screen.blit(victory_text, victory_rect)
+                    
+                    if level_manager.current_level < level_manager.max_levels or level_manager.current_world < level_manager.max_worlds:
+                        continue_text = font_medium.render("Press N for next level, R to replay, or ESC for level select", True, BLACK)
+                    else:
+                        continue_text = font_medium.render("Press N to finish, R to replay, or ESC for level select", True, BLACK)
+                        
+                    continue_rect = continue_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 80))
+                    screen.blit(continue_text, continue_rect)
+            
+            # Play level complete sound when game is won
+            if (goal and player1.rect.colliderect(goal.rect) and 
+                player2.rect.colliderect(goal.rect) and 
+                len(coins) == 0 and
+                not game_complete):  # Only play once when first completing
+                level_complete_sound.play()
+                game_complete = True
         
         # Update display
         pygame.display.flip()
