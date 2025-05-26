@@ -47,7 +47,6 @@ YELLOW = (255, 255, 0)
 PURPLE = (200, 0, 255)
 GRAY = (128, 128, 128)
 BROWN = (139, 69, 19)
-NIGHT_SKY = (25, 25, 112)  # Dark blue for night sky
 EXPLOSION_COLORS = [(255, 0, 0), (255, 128, 0), (255, 255, 0), (255, 255, 255)]  # Red, Orange, Yellow, White
 
 # Clock for controlling frame rate
@@ -299,6 +298,7 @@ except Exception as e:
     explosion_sound = DummySound()
 
 # Add these constants for the night sky
+NIGHT_SKY = (25, 25, 50)  # Dark blue for night sky
 STAR_COLOR = (255, 255, 200)  # Yellowish white for stars
 
 def setup_display():
@@ -1497,121 +1497,6 @@ class Star:
                  int(STAR_COLOR[2] * self.brightness))
         pygame.draw.circle(screen, color, (self.x, self.y), self.size)
 
-def calculate_level_bounds(platforms, coins, spikes, goal, player_spawns):
-    """Calculate the actual bounds of all objects in the level"""
-    if not (platforms or coins or spikes or goal):
-        return {"min_x": -500, "max_x": 1780, "min_y": -500, "max_y": 1220}
-    
-    min_x = float('inf')
-    max_x = float('-inf')
-    min_y = float('inf')
-    max_y = float('-inf')
-    
-    # Check platforms
-    for platform in platforms:
-        min_x = min(min_x, platform.rect.x)
-        max_x = max(max_x, platform.rect.x + platform.rect.width)
-        min_y = min(min_y, platform.rect.y)
-        max_y = max(max_y, platform.rect.y + platform.rect.height)
-    
-    # Check coins
-    for coin in coins:
-        min_x = min(min_x, coin.rect.x - 20)
-        max_x = max(max_x, coin.rect.x + 20)
-        min_y = min(min_y, coin.rect.y - 20)
-        max_y = max(max_y, coin.rect.y + 20)
-    
-    # Check spikes
-    for spike in spikes:
-        min_x = min(min_x, spike.rect.x)
-        max_x = max(max_x, spike.rect.x + spike.rect.width)
-        min_y = min(min_y, spike.rect.y)
-        max_y = max(max_y, spike.rect.y + spike.rect.height)
-    
-    # Check goal
-    if goal:
-        min_x = min(min_x, goal.rect.x)
-        max_x = max(max_x, goal.rect.x + goal.rect.width)
-        min_y = min(min_y, goal.rect.y)
-        max_y = max(max_y, goal.rect.y + goal.rect.height)
-    
-    # Check spawns
-    for spawn in player_spawns:
-        min_x = min(min_x, spawn['x'] - 25)
-        max_x = max(max_x, spawn['x'] + 25)
-        min_y = min(min_y, spawn['y'] - 25)
-        max_y = max(max_y, spawn['y'] + 25)
-    
-    # Add padding
-    padding = 200
-    return {
-        "min_x": min_x - padding,
-        "max_x": max_x + padding,
-        "min_y": min_y - padding,
-        "max_y": max_y + padding
-    }
-
-def calculate_camera_position(player1, player2, level_bounds, screen_width, screen_height):
-    """Calculate optimal camera position to follow players while showing level content"""
-    # Calculate center point between players
-    center_x = (player1.rect.centerx + player2.rect.centerx) / 2
-    center_y = (player1.rect.centery + player2.rect.centery) / 2
-    
-    # Calculate camera position to center horizontally on players
-    camera_x = center_x - screen_width / 2
-    
-    # For vertical positioning, prioritize showing the ground/platforms properly
-    # Instead of centering on players vertically, position camera to show level naturally
-    
-    # Find the main ground level (largest platform near bottom of level bounds)
-    ground_level = level_bounds["max_y"] - 100  # Assume ground is near bottom
-    
-    # Position camera so ground appears near bottom of screen (with some margin)
-    ground_margin = 100  # Space below ground level
-    camera_y = ground_level - screen_height + ground_margin
-    
-    # But also ensure we can see the players - if they're too high, adjust camera up
-    highest_player_y = min(player1.rect.y, player2.rect.y)
-    if highest_player_y < camera_y + 50:  # If players are too high up
-        camera_y = highest_player_y - 50  # Adjust camera to show them
-    
-    # Apply relaxed camera constraints to allow negative coordinates
-    margin = 200
-    
-    # Only constrain if we're going too far beyond the level bounds
-    if level_bounds["max_x"] - level_bounds["min_x"] > screen_width:
-        camera_x = max(level_bounds["min_x"] - margin, 
-                       min(camera_x, level_bounds["max_x"] - screen_width + margin))
-    
-    # Allow camera to show negative Y coordinates but don't go too far beyond level
-    if level_bounds["max_y"] - level_bounds["min_y"] > screen_height:
-        camera_y = max(level_bounds["min_y"] - margin,
-                       min(camera_y, level_bounds["max_y"] - screen_height + margin))
-    
-    return camera_x, camera_y
-
-def draw_with_camera(screen, obj, camera_x, camera_y):
-    """Draw an object with camera offset"""
-    # All game objects (platforms, spikes, players, goal, coins) use rect
-    screen_x = obj.rect.x - camera_x
-    screen_y = obj.rect.y - camera_y
-    
-    # Only draw if on screen (with some margin)
-    if (-100 < screen_x < screen.get_width() + 100 and 
-        -100 < screen_y < screen.get_height() + 100):
-        
-        # Temporarily adjust position for drawing
-        original_x = obj.rect.x
-        original_y = obj.rect.y
-        obj.rect.x = screen_x
-        obj.rect.y = screen_y
-        
-        obj.draw(screen)
-        
-        # Restore original position
-        obj.rect.x = original_x
-        obj.rect.y = original_y
-
 def main():
     level_manager = LevelManager()
     platforms, coins, total_coins, spikes = level_manager.get_level()
@@ -1630,10 +1515,6 @@ def main():
     # Set goal position based on level data
     goal = create_goal_from_level_data(level_manager)
     
-    # Calculate level bounds for camera system
-    level_bounds = calculate_level_bounds(platforms, coins, spikes, goal, player_spawns)
-    camera_x, camera_y = 0, 0
-    
     # Create stars for night sky (World 2)
     stars = [Star() for _ in range(100)]
     
@@ -1643,8 +1524,6 @@ def main():
     time_elapsed = 0  # For star twinkling
     show_spike_message = False
     spike_message_timer = 0
-    
-    print(f"Level bounds: X({level_bounds['min_x']:.0f} to {level_bounds['max_x']:.0f}) Y({level_bounds['min_y']:.0f} to {level_bounds['max_y']:.0f})")
     
     while running:
         time_elapsed += 0.1  # Increment time for animations
@@ -1670,16 +1549,6 @@ def main():
                     
                     platforms, coins, total_coins, spikes = level_manager.get_level()
                     goal = create_goal_from_level_data(level_manager)  # Update goal position
-                    
-                    # Recalculate level bounds
-                    level_data = level_manager.get_current_level_data()
-                    player_spawns = level_data.get('player_spawns', [
-                        {'x': 100, 'y': SCREEN_HEIGHT - 100},
-                        {'x': 150, 'y': SCREEN_HEIGHT - 100}
-                    ])
-                    level_bounds = calculate_level_bounds(platforms, coins, spikes, goal, player_spawns)
-                    print(f"Level bounds: X({level_bounds['min_x']:.0f} to {level_bounds['max_x']:.0f}) Y({level_bounds['min_y']:.0f} to {level_bounds['max_y']:.0f})")
-                    
                     game_complete = False
                 elif event.key == pygame.K_n and game_complete and not all_levels_complete:
                     # Next level
@@ -1690,16 +1559,6 @@ def main():
                         player2.collected_coins = 0
                         platforms, coins, total_coins, spikes = level_manager.get_level()
                         goal = create_goal_from_level_data(level_manager)  # Update goal position
-                        
-                        # Recalculate level bounds
-                        level_data = level_manager.get_current_level_data()
-                        player_spawns = level_data.get('player_spawns', [
-                            {'x': 100, 'y': SCREEN_HEIGHT - 100},
-                            {'x': 150, 'y': SCREEN_HEIGHT - 100}
-                        ])
-                        level_bounds = calculate_level_bounds(platforms, coins, spikes, goal, player_spawns)
-                        print(f"Level bounds: X({level_bounds['min_x']:.0f} to {level_bounds['max_x']:.0f}) Y({level_bounds['min_y']:.0f} to {level_bounds['max_y']:.0f})")
-                        
                         game_complete = False
                         
                         # Show world transition message if we just moved to a new world
@@ -1726,16 +1585,6 @@ def main():
                     player2.collected_coins = 0
                     platforms, coins, total_coins, spikes = level_manager.get_level()
                     goal = create_goal_from_level_data(level_manager)
-                    
-                    # Recalculate level bounds
-                    level_data = level_manager.get_current_level_data()
-                    player_spawns = level_data.get('player_spawns', [
-                        {'x': 100, 'y': SCREEN_HEIGHT - 100},
-                        {'x': 150, 'y': SCREEN_HEIGHT - 100}
-                    ])
-                    level_bounds = calculate_level_bounds(platforms, coins, spikes, goal, player_spawns)
-                    print(f"Level bounds: X({level_bounds['min_x']:.0f} to {level_bounds['max_x']:.0f}) Y({level_bounds['min_y']:.0f} to {level_bounds['max_y']:.0f})")
-                    
                     game_complete = False
                     all_levels_complete = False
                 elif event.key == pygame.K_2:
@@ -1747,16 +1596,6 @@ def main():
                     player2.collected_coins = 0
                     platforms, coins, total_coins, spikes = level_manager.get_level()
                     goal = create_goal_from_level_data(level_manager)
-                    
-                    # Recalculate level bounds
-                    level_data = level_manager.get_current_level_data()
-                    player_spawns = level_data.get('player_spawns', [
-                        {'x': 100, 'y': SCREEN_HEIGHT - 100},
-                        {'x': 150, 'y': SCREEN_HEIGHT - 100}
-                    ])
-                    level_bounds = calculate_level_bounds(platforms, coins, spikes, goal, player_spawns)
-                    print(f"Level bounds: X({level_bounds['min_x']:.0f} to {level_bounds['max_x']:.0f}) Y({level_bounds['min_y']:.0f} to {level_bounds['max_y']:.0f})")
-                    
                     game_complete = False
                     all_levels_complete = False
                 elif event.key == pygame.K_3:
@@ -1768,16 +1607,6 @@ def main():
                     player2.collected_coins = 0
                     platforms, coins, total_coins, spikes = level_manager.get_level()
                     goal = create_goal_from_level_data(level_manager)
-                    
-                    # Recalculate level bounds
-                    level_data = level_manager.get_current_level_data()
-                    player_spawns = level_data.get('player_spawns', [
-                        {'x': 100, 'y': SCREEN_HEIGHT - 100},
-                        {'x': 150, 'y': SCREEN_HEIGHT - 100}
-                    ])
-                    level_bounds = calculate_level_bounds(platforms, coins, spikes, goal, player_spawns)
-                    print(f"Level bounds: X({level_bounds['min_x']:.0f} to {level_bounds['max_x']:.0f}) Y({level_bounds['min_y']:.0f} to {level_bounds['max_y']:.0f})")
-                    
                     game_complete = False
                     all_levels_complete = False
                 elif event.key == pygame.K_F11:
@@ -1832,9 +1661,6 @@ def main():
                 if goal.is_door:
                     goal.door_open = False
         
-        # Calculate camera position
-        camera_x, camera_y = calculate_camera_position(player1, player2, level_bounds, SCREEN_WIDTH, SCREEN_HEIGHT)
-        
         # Draw everything to screen
         level_data = level_manager.get_current_level_data()
         background_type = level_data.get('background_type', 'day')
@@ -1850,24 +1676,24 @@ def main():
         else:
             screen.fill((135, 206, 235))  # Sky blue for day time
         
-        # Draw platforms with camera
+        # Draw platforms
         for platform in platforms:
-            draw_with_camera(screen, platform, camera_x, camera_y)
+            platform.draw(screen)
         
-        # Draw coins with camera
+        # Draw coins
         for coin in coins:
-            draw_with_camera(screen, coin, camera_x, camera_y)
+            coin.draw(screen)
         
-        # Draw goal with camera
-        draw_with_camera(screen, goal, camera_x, camera_y)
+        # Draw goal
+        goal.draw(screen)
         
-        # Draw players with camera
-        draw_with_camera(screen, player1, camera_x, camera_y)
-        draw_with_camera(screen, player2, camera_x, camera_y)
+        # Draw players
+        player1.draw(screen)
+        player2.draw(screen)
         
-        # Draw spikes with camera
+        # Draw spikes
         for spike in spikes:
-            draw_with_camera(screen, spike, camera_x, camera_y)
+            spike.draw(screen)
         
         # Draw spike message if needed
         if show_spike_message:
