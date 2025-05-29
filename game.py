@@ -1480,6 +1480,19 @@ def create_goal_from_level_data(level_manager):
     
     return Goal(x, y, is_door)
 
+def update_player_spawn_points(level_manager, player1, player2):
+    """Update player spawn coordinates based on current level data"""
+    level_data = level_manager.get_current_level_data()
+    player_spawns = level_data.get('player_spawns', [
+        {'x': 100, 'y': SCREEN_HEIGHT - 100},
+        {'x': 150, 'y': SCREEN_HEIGHT - 100}
+    ])
+    
+    player1.spawn_x = player_spawns[0]['x']
+    player1.spawn_y = player_spawns[0]['y']
+    player2.spawn_x = player_spawns[1]['x']
+    player2.spawn_y = player_spawns[1]['y']
+
 # Create a Star class for the night sky background
 class Star:
     def __init__(self):
@@ -1808,6 +1821,11 @@ def main():
                             player1.rect.y = player_spawns[0]['y']
                             player2.rect.x = player_spawns[1]['x']
                             player2.rect.y = player_spawns[1]['y']
+                            # Update spawn coordinates so respawn works correctly
+                            player1.spawn_x = player_spawns[0]['x']
+                            player1.spawn_y = player_spawns[0]['y']
+                            player2.spawn_x = player_spawns[1]['x']
+                            player2.spawn_y = player_spawns[1]['y']
                             player1.vel_x = 0
                             player1.vel_y = 0
                             player2.vel_x = 0
@@ -1824,27 +1842,32 @@ def main():
                             jump_sound.play()
                 elif event.key == pygame.K_r and game_state == GAME_STATE_PLAYING:
                     # Reset current level
-                    player1.respawn()
-                    player2.respawn()
-                    player1.collected_coins = 0
-                    player2.collected_coins = 0
-                    
                     if all_levels_complete:
                         level_manager.reset()
                         all_levels_complete = False
                     
                     platforms, coins, total_coins, spikes = level_manager.get_level()
                     goal = create_goal_from_level_data(level_manager)
+                    
+                    # Update spawn points before respawning
+                    update_player_spawn_points(level_manager, player1, player2)
+                    player1.respawn()
+                    player2.respawn()
+                    player1.collected_coins = 0
+                    player2.collected_coins = 0
                     game_complete = False
                 elif event.key == pygame.K_n and game_complete and not all_levels_complete and game_state == GAME_STATE_PLAYING:
                     # Next level
                     if level_manager.next_level():
+                        platforms, coins, total_coins, spikes = level_manager.get_level()
+                        goal = create_goal_from_level_data(level_manager)
+                        
+                        # Update spawn points before respawning
+                        update_player_spawn_points(level_manager, player1, player2)
                         player1.respawn()
                         player2.respawn()
                         player1.collected_coins = 0
                         player2.collected_coins = 0
-                        platforms, coins, total_coins, spikes = level_manager.get_level()
-                        goal = create_goal_from_level_data(level_manager)
                         game_complete = False
                         
                         # Show world transition message if we just moved to a new world
