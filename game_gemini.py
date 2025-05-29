@@ -552,13 +552,29 @@ class LevelManager:
             os.makedirs(self.levels_dir); print(f"Created missing '{self.levels_dir}' directory.")
             return
 
-        pattern = re.compile(r"world(\d+)_level(\d+)_([a-zA-Z0-9_]+)\.json", re.IGNORECASE)
+        # Pattern for new versioned files: world1_level1_a.json
+        versioned_pattern = re.compile(r"world(\d+)_level(\d+)_([a-zA-Z0-9_]+)\.json", re.IGNORECASE)
+        # Pattern for legacy files: world1_level1.json
+        legacy_pattern = re.compile(r"world(\d+)_level(\d+)\.json", re.IGNORECASE)
 
         for filename in os.listdir(self.levels_dir):
-            match = pattern.match(filename)
+            # Try versioned pattern first
+            match = versioned_pattern.match(filename)
+            version_id = None
+            if match:
+                world = int(match.group(1))
+                level_num = int(match.group(2))
+                version_id = match.group(3)
+            else:
+                # Try legacy pattern
+                match = legacy_pattern.match(filename)
+                if match:
+                    world = int(match.group(1))
+                    level_num = int(match.group(2))
+                    version_id = "default"  # Default version ID for legacy files
+            
             if match:
                 try:
-                    world = int(match.group(1)); level_num = int(match.group(2)); version_id = match.group(3)
                     filepath = os.path.join(self.levels_dir, filename)
                     with open(filepath, 'r') as f: level_data = json.load(f)
                     
